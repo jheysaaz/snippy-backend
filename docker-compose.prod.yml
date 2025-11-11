@@ -6,15 +6,6 @@ services:
   postgres:
     # Don't expose PostgreSQL port externally in production
     ports: []
-    # Stronger resource limits for production
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 1G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
     # Add SSL support (requires SSL certificates)
     command:
       - "postgres"
@@ -52,15 +43,6 @@ services:
   api:
     # Use pre-built image in production
     image: snippy-api:latest
-    # Stronger resource limits
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 512M
-        reservations:
-          cpus: "0.5"
-          memory: 256M
     # Production environment overrides
     environment:
       - GIN_MODE=release

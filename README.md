@@ -505,6 +505,34 @@ docker-compose down
 docker-compose down -v
 ```
 
+## Deployment
+
+### Manual Deployment
+
+See the complete deployment guide for DigitalOcean:
+- **[🚀 Deployment Guide](./DEPLOYMENT.md)** - Complete DigitalOcean setup
+- **[⚡ Quick Start](./QUICKSTART.md)** - Quick reference commands
+
+### Automated Deployment (CI/CD)
+
+This project includes automated deployment to DigitalOcean via GitHub Actions:
+
+1. **Setup GitHub Secrets** (one-time):
+   - `DROPLET_HOST` - Your droplet IP
+   - `DROPLET_USERNAME` - SSH user (e.g., `deploy`)
+   - `DROPLET_SSH_KEY` - Private SSH key for GitHub Actions
+
+2. **Deploy automatically** on every push to `main`:
+   ```bash
+   git push origin main
+   # GitHub Actions will automatically deploy to your droplet
+   ```
+
+3. **Manual deploy** via GitHub UI:
+   - Go to **Actions** → **Deploy to DigitalOcean** → **Run workflow**
+
+📖 Full setup instructions: **[GitHub Actions Deployment Guide](./docs/GITHUB_ACTIONS_DEPLOYMENT.md)**
+
 ## Documentation
 
 Comprehensive documentation is available in the `/docs` directory:
