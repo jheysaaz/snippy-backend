@@ -347,16 +347,126 @@ func login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT token
-	token, err := GenerateToken(user)
+	// Generate JWT access token (short-lived)
+	accessToken, err := GenerateAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
 		return
 	}
 
-	// Return user info and token
-	c.JSON(http.StatusOK, gin.H{
-		"user":  user,
-		"token": token,
-	})
+	// Generate refresh token (long-lived)
+	refreshToken, err := generateRefreshToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		return
+	}
+
+	// Get device info from user agent (optional)
+	deviceInfo := c.GetHeader("User-Agent")
+
+	// Store refresh token in database
+	if err := storeRefreshToken(user.ID, refreshToken, deviceInfo); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+		return
+	}
+
+	// Return user info and both tokens
+	response := LoginResponse{
+		User:         user,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int64(AccessTokenDuration.Seconds()),
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// refreshAccessToken generates a new access token using a valid refresh token
+func refreshAccessToken(c *gin.Context) {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate refresh token
+	rt, err := validateRefreshToken(req.RefreshToken)
+	if err != nil {
+		if err == ErrTokenExpired {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired, please login again"})
+		} else if err == ErrTokenRevoked {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token revoked, please login again"})
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		}
+		return
+	}
+
+	// Get user from database
+	query := `
+		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`
+
+	row := db.QueryRow(query, rt.UserID)
+	user, err := scanUser(row)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user"})
+		return
+	}
+
+	// Generate new access token
+	accessToken, err := GenerateAccessToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+		return
+	}
+
+	// Return new access token
+	response := RefreshTokenResponse{
+		AccessToken: accessToken,
+		ExpiresIn:   int64(AccessTokenDuration.Seconds()),
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// logout revokes the refresh token
+func logout(c *gin.Context) {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Revoke the refresh token
+	if err := revokeRefreshToken(req.RefreshToken); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+// logoutAll revokes all refresh tokens for the authenticated user
+func logoutAll(c *gin.Context) {
+	// Get user ID from JWT token in context (set by AuthMiddleware)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Revoke all tokens for this user
+	if err := revokeAllUserTokens(userID.(string)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout from all devices"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out from all devices successfully"})
 }

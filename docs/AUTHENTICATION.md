@@ -4,24 +4,68 @@ Complete guide for authentication and authorization in Snippy Backend.
 
 ## Overview
 
-Snippy Backend now implements **JWT (JSON Web Token)** based authentication with proper authorization to ensure:
+Snippy Backend implements **JWT (JSON Web Token)** based authentication with **Refresh Token** support for secure, long-lasting sessions:
 
+- ✅ Short-lived access tokens (15 minutes) for API requests
+- ✅ Long-lived refresh tokens (30 days) for persistent sessions
 - ✅ Users can only modify their own data
 - ✅ Snippets are owned by users
-- ✅ Secure session management with tokens
+- ✅ Automatic token cleanup to prevent database bloat
 - ✅ Protected endpoints require authentication
 
 ---
 
 ## Authentication Flow
 
+### Initial Login (First Time)
 ```
 1. User registers → POST /api/v1/users
-2. User logs in → POST /api/v1/auth/login → Receives JWT token
-3. User includes token in subsequent requests → Authorization: Bearer <token>
-4. Server validates token and extracts user info
-5. Server checks ownership before allowing modifications
+2. User logs in → POST /api/v1/auth/login 
+   → Receives: accessToken (15 min) + refreshToken (30 days)
+3. Client stores both tokens securely
 ```
+
+### Normal API Usage
+```
+1. Client uses accessToken for API requests
+   → Authorization: Bearer <accessToken>
+2. Server validates token and extracts user info
+3. Server checks ownership before allowing modifications
+```
+
+### When Access Token Expires
+```
+1. API returns 401 Unauthorized (token expired)
+2. Client automatically calls POST /api/v1/auth/refresh
+   → Sends: refreshToken
+   → Receives: new accessToken (15 min)
+3. Client retries original request with new accessToken
+4. User never notices (seamless experience)
+```
+
+### When Refresh Token Expires (After 30 Days)
+```
+1. Refresh endpoint returns 401 (refresh token expired)
+2. Client redirects user to login page
+3. User logs in again
+4. Cycle repeats
+```
+
+---
+
+## Token Details
+
+### Access Token
+- **Lifetime**: 15 minutes
+- **Purpose**: Authorize API requests
+- **Storage**: Memory/local storage (frontend)
+- **Contains**: UserID, Username, Email, Expiration
+
+### Refresh Token
+- **Lifetime**: 30 days
+- **Purpose**: Get new access tokens without re-login
+- **Storage**: Secure storage (httpOnly cookie or secure storage)
+- **Database**: Stored in `refresh_tokens` table with metadata
 
 ---
 
@@ -31,11 +75,16 @@ Snippy Backend now implements **JWT (JSON Web Token)** based authentication with
 
 - `GET /api/v1/health` - Health check
 - `POST /api/v1/users` - User registration
-- `POST /api/v1/auth/login` - User login
+- `POST /api/v1/auth/login` - User login (returns both tokens)
+- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - Logout (revoke refresh token)
 - `GET /api/v1/snippets` - View all snippets
 - `GET /api/v1/snippets/:id` - View a single snippet
 
 ### Protected Endpoints (Authentication Required)
+
+**Auth Management:**
+- `POST /api/v1/auth/logout-all` - Logout from all devices (revoke all tokens)
 
 **User Management:**
 
@@ -47,7 +96,6 @@ Snippy Backend now implements **JWT (JSON Web Token)** based authentication with
 - `GET /api/v1/users/:id/snippets` - Get user's snippets (requires auth)
 
 **Snippet Management:**
-
 - `POST /api/v1/snippets` - Create snippet (requires auth, automatically assigned to user)
 - `PUT /api/v1/snippets/:id` - Update snippet (can only update own snippets)
 - `DELETE /api/v1/snippets/:id` - Delete snippet (can only delete own snippets)
@@ -82,7 +130,7 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 ---
 
-### 2. Login and Get Token
+### 2. Login and Get Tokens
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
@@ -104,11 +152,16 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
     "created_at": "2025-11-10T10:30:00Z",
     "updated_at": "2025-11-10T10:30:00Z"
   },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIiwidXNlcm5hbWUiOiJqb2huZG9lIiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwiZXhwIjoxNzMxMjYyMjAwfQ.signature"
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIiwidXNlcm5hbWUiOiJqb2huZG9lIiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwiZXhwIjoxNzMxMjYyMjAwfQ.signature",
+  "refresh_token": "abc123def456ghi789jkl012mno345pqr678stu901vwx234yz",
+  "expires_in": 900
 }
 ```
 
-**Important:** Save the token! You'll need it for authenticated requests.
+**Important:** Save both tokens!
+- Use the `access_token` for API requests (valid for 15 minutes)
+- Use the `refresh_token` to get new access tokens (valid for 30 days)
+- `expires_in` is in seconds (900 = 15 minutes)
 
 ---
 
@@ -149,7 +202,73 @@ curl -X POST http://localhost:8080/api/v1/snippets \
 
 ---
 
-### 4. Update Your Own Snippet
+### 4. Refresh Your Access Token
+
+When your access token expires (after 15 minutes), use the refresh token to get a new one:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh_token": "abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN_HERE.signature",
+  "expires_in": 900
+}
+```
+
+**Note:** Continue using the same refresh token until it expires (30 days) or you logout.
+
+---
+
+### 5. Logout (Single Device)
+
+Revoke your current refresh token (logout from current device):
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh_token": "abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+---
+
+### 6. Logout All Devices
+
+Revoke all refresh tokens for your account (requires access token):
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/logout-all \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN_HERE"
+```
+
+**Response:**
+
+```json
+{
+  "message": "Logged out from all devices successfully"
+}
+```
+
+---
+
+### 7. Update Your Own Snippet
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/snippets/1 \
@@ -181,7 +300,7 @@ curl -X PUT http://localhost:8080/api/v1/snippets/1 \
 
 ---
 
-### 5. Try to Update Someone Else's Snippet
+### 8. Try to Update Someone Else's Snippet
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/snippets/999 \
@@ -202,7 +321,7 @@ curl -X PUT http://localhost:8080/api/v1/snippets/999 \
 
 ---
 
-### 6. Update Your Profile
+### 9. Update Your Profile
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000 \
@@ -226,7 +345,7 @@ curl -X PUT http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440
 
 ---
 
-### 7. Try to Update Someone Else's Profile
+### 10. Try to Update Someone Else's Profile
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/OTHER_USER_ID \
@@ -247,7 +366,7 @@ curl -X PUT http://localhost:8080/api/v1/users/OTHER_USER_ID \
 
 ---
 
-### 8. View Snippets (Public, No Auth Required)
+### 11. View Snippets (Public, No Auth Required)
 
 ```bash
 curl http://localhost:8080/api/v1/snippets

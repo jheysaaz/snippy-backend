@@ -44,6 +44,9 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
+	// Start background cleanup job for expired refresh tokens
+	go startTokenCleanupJob()
+
 	// Ensure cleanup on exit
 	defer func() {
 		if err := db.Close(); err != nil {
@@ -80,6 +83,15 @@ func main() {
 		auth.Use(StrictRateLimitMiddleware(strictLimiter))
 		{
 			auth.POST("/login", login)
+			auth.POST("/refresh", refreshAccessToken) // Exchange refresh token for new access token
+			auth.POST("/logout", logout)              // Revoke single refresh token
+		}
+
+		// Protected auth routes
+		authProtected := api.Group("/auth")
+		authProtected.Use(AuthMiddleware())
+		{
+			authProtected.POST("/logout-all", logoutAll) // Revoke all tokens for user
 		}
 
 		// Public user routes (strict rate limiting for registration)

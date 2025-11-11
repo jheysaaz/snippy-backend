@@ -154,9 +154,15 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken generates a new JWT token for a user
+// GenerateToken generates a new JWT token for a user (DEPRECATED - use GenerateAccessToken)
+// Kept for backward compatibility
 func GenerateToken(user *User) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour) // 24 hour expiration
+	return GenerateAccessToken(user)
+}
+
+// GenerateAccessToken generates a short-lived JWT access token for a user
+func GenerateAccessToken(user *User) (string, error) {
+	expirationTime := time.Now().Add(AccessTokenDuration) // 15 minutes
 
 	claims := &Claims{
 		UserID:   user.ID,

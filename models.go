@@ -93,14 +93,44 @@ type CreateUserRequest struct {
 	Username  string `json:"username" binding:"required,min=3,max=50,alphanum"`
 	Email     string `json:"email" binding:"required,email,max=255"`
 	Password  string `json:"password" binding:"required,min=8,max=128"` // Min 8 chars for security
-	FullName  string `json:"fullName" binding:"max=255"`
-	AvatarURL string `json:"avatarUrl" binding:"max=500,url"`
+	FullName  string `json:"fullName" binding:"omitempty,max=255"`
+	AvatarURL string `json:"avatarUrl" binding:"omitempty,max=500,url"`
 }
 
 // LoginRequest for user login
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+// LoginResponse returned after successful login
+type LoginResponse struct {
+	User         *User  `json:"user"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresIn    int64  `json:"expiresIn"` // Access token expiration in seconds
+}
+
+// RefreshTokenRequest for refreshing access token
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
+}
+
+// RefreshTokenResponse returned after refreshing token
+type RefreshTokenResponse struct {
+	AccessToken string `json:"accessToken"`
+	ExpiresIn   int64  `json:"expiresIn"` // Access token expiration in seconds
+}
+
+// RefreshToken database model
+type RefreshToken struct {
+	ID         string    `json:"id"`
+	UserID     string    `json:"userId"`
+	Token      string    `json:"token"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Revoked    bool      `json:"revoked"`
+	DeviceInfo string    `json:"deviceInfo,omitempty"`
 }
 
 // UpdateUserRequest for updating an existing user

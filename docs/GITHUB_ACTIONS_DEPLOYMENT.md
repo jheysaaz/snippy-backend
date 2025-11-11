@@ -58,16 +58,33 @@ Add these secrets:
 | Secret Name        | Value                                      | Description                                        |
 | ------------------ | ------------------------------------------ | -------------------------------------------------- |
 | `DROPLET_HOST`     | `YOUR_DROPLET_IP`                          | Your droplet's IP address (e.g., `164.90.xxx.xxx`) |
-| `DROPLET_USERNAME` | `deploy` or `root`                         | SSH username (preferably `deploy`)                 |
+| `DROPLET_USERNAME` | `root` or `deploy`                         | SSH username (use `root` if that's what you use)   |
 | `DROPLET_SSH_KEY`  | Contents of `~/.ssh/github_actions_deploy` | The **private key** (entire file contents)         |
 | `DROPLET_PORT`     | `22`                                       | SSH port (optional, defaults to 22)                |
 
-**To copy the private key:**
+**⚠️ IMPORTANT: Copy the private key correctly:**
 
 ```bash
+# Display the private key
 cat ~/.ssh/github_actions_deploy
-# Copy everything from -----BEGIN to -----END including these lines
+
+# The key should look like this:
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtz
+# ... (many lines) ...
+# -----END OPENSSH PRIVATE KEY-----
+
+# Copy the ENTIRE output including the BEGIN/END lines
+# Paste it EXACTLY as shown into the DROPLET_SSH_KEY secret
+# Do NOT add or remove any spaces, newlines, or characters
 ```
+
+**Common mistakes to avoid:**
+- ❌ Copying only part of the key
+- ❌ Adding extra spaces or newlines
+- ❌ Copying the `.pub` file (that's the public key, not private)
+- ❌ Missing the BEGIN/END lines
+- ✅ Copy the entire key with all lines intact
 
 ### 4. Verify Project Path on Droplet
 
