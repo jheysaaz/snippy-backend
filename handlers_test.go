@@ -8,10 +8,34 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq"
 )
+
+// generateTestJWT creates a valid JWT token for testing
+func generateTestJWT() string {
+	claims := jwt.MapClaims{
+		"user_id":  "test-user-id",
+		"username": "testuser",
+		"email":    "test@example.com",
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"iat":      time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	
+	// Use test secret or default
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "test-secret-key-for-ci-only"
+	}
+	
+	tokenString, _ := token.SignedString([]byte(secret))
+	return tokenString
+}
 
 // getTestDBURL returns the database URL for testing
 // Checks environment variable first, falls back to default
@@ -147,10 +171,12 @@ func TestCreateSnippetValidation(t *testing.T) {
 			db = testDB
 
 			router := gin.New()
-			router.POST("/api/v1/snippets", createSnippet)
+			// Add auth middleware for create endpoint
+			router.POST("/api/v1/snippets", AuthMiddleware(), createSnippet)
 
 			req, _ := http.NewRequest("POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -321,7 +347,7 @@ func TestUpdateSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.PUT("/api/v1/snippets/:id", updateSnippet)
+	router.PUT("/api/v1/snippets/:id", AuthMiddleware(), updateSnippet)
 
 	tests := []struct {
 		name           string
@@ -366,6 +392,7 @@ func TestUpdateSnippet(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("PUT", "/api/v1/snippets/"+tt.snippetID, bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -395,7 +422,7 @@ func TestDeleteSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.DELETE("/api/v1/snippets/:id", deleteSnippet)
+	router.DELETE("/api/v1/snippets/:id", AuthMiddleware(), deleteSnippet)
 
 	tests := []struct {
 		name           string
@@ -422,6 +449,7 @@ func TestDeleteSnippet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("DELETE", "/api/v1/snippets/"+tt.snippetID, nil)
+			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -434,6 +462,11 @@ func TestDeleteSnippet(t *testing.T) {
 
 func TestCORSMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	
+	// Set CORS env for test
+	os.Setenv("CORS_ALLOWED_ORIGINS", "*")
+	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
+	
 	router := gin.New()
 	router.Use(corsMiddleware())
 
@@ -456,7 +489,8 @@ func TestCORSMiddleware(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	headers := w.Header()
-	if headers.Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("CORS header Access-Control-Allow-Origin not set correctly")
+	allowedOrigin := headers.Get("Access-Control-Allow-Origin")
+	if allowedOrigin != "*" {
+		t.Errorf("CORS header Access-Control-Allow-Origin not set correctly, got: %s", allowedOrigin)
 	}
 }

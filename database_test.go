@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // getTestDBURL returns the database URL for testing
@@ -73,8 +73,8 @@ func TestInitDatabase(t *testing.T) {
 		t.Error("Snippets table was not created")
 	}
 
-	// Verify columns exist
-	columns := []string{"id", "title", "description", "code", "language", "tags", "created_at", "updated_at"}
+	// Verify columns exist (NEW schema)
+	columns := []string{"id", "title", "description", "category", "shortcut", "content", "tags", "user_id", "created_at", "updated_at"}
 	for _, col := range columns {
 		var colExists bool
 		err = testDB.QueryRow(`
@@ -93,8 +93,8 @@ func TestInitDatabase(t *testing.T) {
 		}
 	}
 
-	// Verify indexes exist
-	indexes := []string{"idx_snippets_created_at", "idx_snippets_language", "idx_snippets_tags", "idx_snippets_search"}
+	// Verify indexes exist (NEW schema)
+	indexes := []string{"idx_snippets_created_at", "idx_snippets_category", "idx_snippets_shortcut", "idx_snippets_tags", "idx_snippets_search"}
 	for _, idx := range indexes {
 		var idxExists bool
 		err = testDB.QueryRow(`
@@ -138,11 +138,11 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Test inserting data
+	// Test inserting data (NEW schema)
 	_, err = testDB.Exec(`
-		INSERT INTO snippets (title, description, code, language, tags)
-		VALUES ($1, $2, $3, $4, $5)
-	`, "Test", "Description", "code", "go", []string{"test"})
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, uuid_generate_v4())
+	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}))
 
 	if err != nil {
 		t.Errorf("Failed to insert test data: %v", err)
@@ -161,7 +161,7 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 
 	// Test array operations
 	var tags []string
-	err = testDB.QueryRow("SELECT tags FROM snippets WHERE id = 1").Scan(&tags)
+	err = testDB.QueryRow("SELECT tags FROM snippets WHERE id = 1").Scan(pq.Array(&tags))
 	if err != nil {
 		t.Errorf("Failed to query tags: %v", err)
 	}
@@ -190,11 +190,11 @@ func TestDatabaseTrigger(t *testing.T) {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Insert a snippet
+	// Insert a snippet (NEW schema)
 	_, err = testDB.Exec(`
-		INSERT INTO snippets (title, description, code, language, tags)
-		VALUES ($1, $2, $3, $4, $5)
-	`, "Test", "Description", "code", "go", []string{"test"})
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, uuid_generate_v4())
+	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}))
 
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
