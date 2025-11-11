@@ -38,15 +38,19 @@ func setupTestDB(t *testing.T) *sql.DB {
 	// Clean up test data
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 
-	// Initialize schema
+	// Initialize schema with NEW structure (category, shortcut, content)
 	schema := `
+	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+	
 	CREATE TABLE IF NOT EXISTS snippets (
 		id SERIAL PRIMARY KEY,
 		title VARCHAR(255) NOT NULL,
 		description TEXT,
-		code TEXT NOT NULL,
-		language VARCHAR(50),
+		category VARCHAR(100),
+		shortcut VARCHAR(50),
+		content TEXT NOT NULL,
 		tags TEXT[],
+		user_id UUID,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
@@ -103,8 +107,9 @@ func TestCreateSnippetValidation(t *testing.T) {
 			payload: `{
 				"title": "Test Snippet",
 				"description": "Test description",
-				"code": "console.log('test');",
-				"language": "javascript",
+				"category": "javascript",
+				"shortcut": "js-test",
+				"content": "console.log('test');",
 				"tags": ["test"]
 			}`,
 			expectedStatus: http.StatusCreated,
@@ -112,16 +117,16 @@ func TestCreateSnippetValidation(t *testing.T) {
 		{
 			name: "Missing title",
 			payload: `{
-				"code": "console.log('test');",
-				"language": "javascript"
+				"category": "javascript",
+				"content": "console.log('test');"
 			}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name: "Missing code",
+			name: "Missing content",
 			payload: `{
 				"title": "Test Snippet",
-				"language": "javascript"
+				"category": "javascript"
 			}`,
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -165,12 +170,12 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	// Set global db variable
 	db = testDB
 
-	// Insert test data
+	// Insert test data with NEW schema (category, shortcut, content)
 	_, err := testDB.Exec(`
-		INSERT INTO snippets (title, description, code, language, tags)
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
 		VALUES 
-			('Python Snippet', 'A Python example', 'print("hello")', 'python', ARRAY['python', 'basics']),
-			('JavaScript Snippet', 'A JS example', 'console.log("hello")', 'javascript', ARRAY['javascript'])
+			('Python Snippet', 'A Python example', 'python', 'py-hello', 'print("hello")', ARRAY['python', 'basics'], uuid_generate_v4()),
+			('JavaScript Snippet', 'A JS example', 'javascript', 'js-hello', 'console.log("hello")', ARRAY['javascript'], uuid_generate_v4())
 	`)
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
@@ -194,8 +199,8 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name:           "Filter by language",
-			queryParams:    "?language=python",
+			name:           "Filter by category",
+			queryParams:    "?category=python",
 			expectedStatus: http.StatusOK,
 			checkCount:     true,
 			expectedCount:  1,
@@ -248,11 +253,11 @@ func TestGetSingleSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet
+	// Insert test snippet with NEW schema
 	var snippetID int64
 	err := testDB.QueryRow(`
-		INSERT INTO snippets (title, description, code, language, tags)
-		VALUES ('Test Snippet', 'Description', 'code here', 'go', ARRAY['test'])
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
+		VALUES ('Test Snippet', 'Description', 'go', 'go-test', 'code here', ARRAY['test'], uuid_generate_v4())
 		RETURNING id
 	`).Scan(&snippetID)
 	if err != nil {
@@ -305,10 +310,10 @@ func TestUpdateSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet
+	// Insert test snippet with NEW schema
 	err := testDB.QueryRow(`
-		INSERT INTO snippets (title, description, code, language, tags)
-		VALUES ('Original Title', 'Original Description', 'original code', 'javascript', ARRAY['test'])
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
+		VALUES ('Original Title', 'Original Description', 'javascript', 'js-orig', 'original code', ARRAY['test'], uuid_generate_v4())
 		RETURNING id
 	`).Scan(new(int64))
 	if err != nil {
@@ -337,7 +342,7 @@ func TestUpdateSnippet(t *testing.T) {
 			snippetID: "1",
 			payload: `{
 				"title": "New Title",
-				"code": "new code"
+				"content": "new code"
 			}`,
 			expectedStatus: http.StatusOK,
 		},
@@ -379,10 +384,10 @@ func TestDeleteSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet
+	// Insert test snippet with NEW schema
 	err := testDB.QueryRow(`
-		INSERT INTO snippets (title, description, code, language, tags)
-		VALUES ('To Delete', 'Description', 'code', 'go', ARRAY['test'])
+		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
+		VALUES ('To Delete', 'Description', 'go', 'go-delete', 'code', ARRAY['test'], uuid_generate_v4())
 		RETURNING id
 	`).Scan(new(int64))
 	if err != nil {
