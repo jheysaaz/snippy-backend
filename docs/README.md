@@ -16,7 +16,7 @@ Welcome to the Snippy Backend documentation! This guide will help you find the i
 - **[DATABASE.md](./DATABASE.md)** - Database schema and optimizations
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)** - JWT authentication & authorization
 - **[SECURITY.md](./SECURITY.md)** - Security audit & best practices
-- **[CI_CD.md](./CI_CD.md)** - Continuous integration & development workflow
+- **[GITHUB_ACTIONS_DEPLOYMENT.md](./GITHUB_ACTIONS_DEPLOYMENT.md)** - Deployment with Docker Compose & systemd
 
 ---
 
@@ -312,12 +312,6 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed development guidelines.
    - Use case description
    - Proposed solution
    - Alternative approaches considered
-
----
-
-## License
-
-MIT License - See [LICENSE](../LICENSE) file for details.
 
 ---
 

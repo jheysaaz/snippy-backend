@@ -305,8 +305,6 @@ curl -X PUT http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440
 
 ### Create a Snippet
 
-MIT
-
 ```bash
 curl -X POST http://localhost:8080/api/v1/snippets \
   -H "Content-Type: application/json" \
@@ -507,25 +505,23 @@ docker-compose down -v
 
 ## Deployment
 
-### Manual Deployment
+### Automated Deployment
 
-See the complete deployment guide for DigitalOcean:
-- **[🚀 Deployment Guide](./DEPLOYMENT.md)** - Complete DigitalOcean setup
-- **[⚡ Quick Start](./QUICKSTART.md)** - Quick reference commands
+This project uses automated deployment to DigitalOcean via GitHub Actions with Docker Compose and systemd:
 
-### Automated Deployment (CI/CD)
+- **[🚀 Deployment Guide](./docs/GITHUB_ACTIONS_DEPLOYMENT.md)** - Complete setup guide
 
-This project includes automated deployment to DigitalOcean via GitHub Actions:
+**Quick setup**:
 
-1. **Setup GitHub Secrets** (one-time):
+1. **GitHub Secrets** (one-time):
    - `DROPLET_HOST` - Your droplet IP
-   - `DROPLET_USERNAME` - SSH user (e.g., `deploy`)
+   - `DROPLET_USERNAME` - SSH user (typically `root`)
    - `DROPLET_SSH_KEY` - Private SSH key for GitHub Actions
 
 2. **Deploy automatically** on every push to `main`:
    ```bash
    git push origin main
-   # GitHub Actions will automatically deploy to your droplet
+   # GitHub Actions builds binary and deploys via systemd
    ```
 
 3. **Manual deploy** via GitHub UI:
@@ -554,7 +550,3 @@ Comprehensive documentation is available in the `/docs` directory:
 - [Database schema details](./docs/DATABASE.md#schema)
 - [API error responses](./docs/API.md#error-responses)
 - [Performance optimization guide](./docs/DATABASE.md#performance-optimizations)
-
-## License
-
-MIT

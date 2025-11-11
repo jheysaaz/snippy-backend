@@ -1,6 +1,52 @@
-# GitHub Actions Deployment Setup
+# GitHub Actions Deployment with Docker Compose + systemd
 
-This guide explains how to set up automated deployment to your DigitalOcean droplet using GitHub Actions.
+This guide explains the automated deployment setup for Snippy Backend using GitHub Actions, Docker Compose, and systemd.
+
+## Architecture Overview
+
+The deployment uses a robust three-tier approach:
+
+1. **GitHub Actions**: Compiles the Go binary in CI environment
+2. **Docker Compose**: Orchestrates PostgreSQL and API containers
+3. **systemd**: Ensures automatic startup and restart on failure
+
+### Why This Approach?
+
+✅ **No server compilation**: Binary is built in GitHub Actions with full resources
+✅ **Automatic startup**: systemd starts services on server boot
+✅ **Automatic recovery**: systemd restarts services if they crash
+✅ **Simple management**: Single command to control everything
+✅ **Production-ready**: Industry standard for service management
+
+## Components
+
+### 1. docker-compose.yml
+
+Defines two services:
+
+- **postgres**: PostgreSQL 16 database with health checks
+- **api**: Alpine container running the compiled Go binary
+
+The binary and `.env.production` are mounted as read-only volumes from the host.
+
+### 2. snippy-backend.service
+
+systemd unit file that:
+- Runs `docker-compose up -d` on service start
+- Runs `docker-compose down` on service stop
+- Automatically restarts on failure
+- Starts after Docker daemon is ready
+
+### 3. GitHub Actions Workflow (build-and-deploy.yml)
+
+On every push to `main`:
+
+1. **Build**: Compiles static Go binary with `CGO_ENABLED=0`
+2. **Copy**: Transfers binary, docker-compose.yml, and service file to server via SCP
+3. **Deploy**: SSH to server and:
+   - Installs systemd service (if not already installed)
+   - Restarts the service (which restarts Docker Compose)
+   - Verifies health check endpoint
 
 ## Prerequisites
 
@@ -86,16 +132,19 @@ cat ~/.ssh/github_actions_deploy
 - ❌ Missing the BEGIN/END lines
 - ✅ Copy the entire key with all lines intact
 
-### 4. Verify Project Path on Droplet
+### 4. Create .env.production on Server
 
-Make sure your project is at `/opt/snippy-backend` on the droplet:
+SSH to your droplet and create the production environment file:
 
 ```bash
-ssh deploy@YOUR_DROPLET_IP
-ls -la /opt/snippy-backend
+ssh root@YOUR_DROPLET_IP
+cd /root/snippy-backend
+
+# Create .env.production with your configuration
+nano .env.production
 ```
 
-If it's in a different location, update the workflow file (`.github/workflows/deploy.yml`) with the correct path.
+This file should contain all required environment variables for the API.
 
 ### 5. Test SSH Connection
 
@@ -103,26 +152,102 @@ Test that GitHub Actions can connect:
 
 ```bash
 # From your local machine, test with the GitHub Actions key
-ssh -i ~/.ssh/github_actions_deploy deploy@YOUR_DROPLET_IP "echo 'Connection successful!'"
+ssh -i ~/.ssh/github_actions_deploy root@YOUR_DROPLET_IP "echo 'Connection successful!'"
 ```
 
 ## How It Works
 
-The deployment workflow (`.github/workflows/deploy.yml`) automatically:
+### Deployment Flow
 
-1. **Triggers** on every push to `main` branch (or manual workflow dispatch)
-2. **Connects** to your droplet via SSH
-3. **Pulls** the latest code from GitHub
-4. **Runs** the `deploy.sh` script to build and restart containers
-5. **Verifies** the API is healthy after deployment
-6. **Notifies** if the deployment fails
+1. **Push to main**: Developer pushes code to `main` branch
+2. **Build binary**: GitHub Actions compiles static Go binary
+3. **Transfer files**: SCP copies binary, docker-compose.yml, and systemd service to server
+4. **Install service**: Script installs systemd service (first time only)
+5. **Restart**: systemd restarts the service, which runs `docker-compose up -d`
+6. **Verify**: Health check confirms API is responding
+
+### systemd Service Management
+
+The `snippy-backend.service` file defines:
+
+```ini
+[Unit]
+Description=Snippy Backend API
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/root/snippy-backend
+ExecStart=/usr/bin/docker-compose up -d
+ExecStop=/usr/bin/docker-compose down
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+This ensures:
+- Service starts after Docker
+- Runs docker-compose commands
+- Restarts on failure
+- Starts automatically on boot
+
+## Server Management Commands
+
+Once deployed, use these commands on the server:
+
+### View Service Status
+
+```bash
+# Check systemd service status
+systemctl status snippy-backend
+
+# View service logs
+journalctl -u snippy-backend -f
+
+# Check container status
+docker-compose ps
+
+# View container logs
+docker-compose logs -f
+docker-compose logs -f api      # API only
+docker-compose logs -f postgres # Postgres only
+```
+
+### Control the Service
+
+```bash
+# Restart everything
+systemctl restart snippy-backend
+
+# Stop everything
+systemctl stop snippy-backend
+
+# Start everything
+systemctl start snippy-backend
+
+# View recent logs (last 100 lines)
+docker-compose logs --tail=100 api
+```
+
+### Health Check
+
+```bash
+# Test API health endpoint
+curl http://localhost:8080/api/v1/health
+
+# Should return:
+# {"status":"healthy","timestamp":"2024-01-15T10:30:00Z"}
+```
 
 ## Manual Trigger
 
-You can also trigger the deployment manually:
+You can manually trigger deployment:
 
 1. Go to **Actions** tab in your GitHub repository
-2. Click **Deploy to DigitalOcean** workflow
+2. Click **Build and Deploy** workflow
 3. Click **Run workflow** → **Run workflow**
 
 ## Monitoring Deployments
@@ -133,23 +258,61 @@ To view deployment logs:
 2. Click on the latest workflow run
 3. Expand the deployment steps to see detailed logs
 
+The deploy step shows:
+- systemd service status
+- Container status (`docker-compose ps`)
+- Health check results
+- Container logs (if health check fails)
+
 ## Rollback
 
-If a deployment fails, you can rollback on the droplet:
+If a deployment fails or introduces bugs:
+
+### Option 1: Re-run Previous Workflow
+
+1. Go to **Actions** → Find the last successful deployment
+2. Click **Re-run all jobs**
+
+### Option 2: Manual Rollback on Server
 
 ```bash
-ssh deploy@YOUR_DROPLET_IP
-cd /opt/snippy-backend
+ssh root@YOUR_DROPLET_IP
+cd /root/snippy-backend
 
 # View git history
 git log --oneline -10
 
-# Rollback to previous commit
-git reset --hard PREVIOUS_COMMIT_HASH
+# Checkout previous version
+git checkout PREVIOUS_COMMIT_HASH
 
-# Redeploy
-./deploy.sh production
+# Restart service
+systemctl restart snippy-backend
+
+# Verify
+docker-compose ps
+curl http://localhost:8080/api/v1/health
 ```
+
+## Automatic Startup on Server Boot
+
+The systemd service ensures your application starts automatically when the server boots:
+
+```bash
+# Enable autostart (done automatically by deployment)
+systemctl enable snippy-backend
+
+# Check if enabled
+systemctl is-enabled snippy-backend
+# Should return: enabled
+
+# Test by rebooting
+sudo reboot
+
+# After reboot, check status
+systemctl status snippy-backend
+docker-compose ps
+```
+
 
 ## Security Best Practices
 

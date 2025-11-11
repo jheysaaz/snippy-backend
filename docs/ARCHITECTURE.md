@@ -668,7 +668,3 @@ if err := db.Ping(); err != nil {
 - **Jaeger**: Distributed tracing
 
 ---
-
-## License
-
-MIT License - See LICENSE file for details

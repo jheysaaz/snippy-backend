@@ -31,6 +31,27 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           source: "snippy-api"
           target: "/root/snippy-backend/"
+          overwrite: true
+
+      - name: Copy systemd service file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "snippy-backend.service"
+          target: "/root/snippy-backend/"
+          overwrite: true
+
+      - name: Copy docker-compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "/root/snippy-backend/"
+          overwrite: true
 
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -39,61 +60,33 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
-            set -euxo pipefail
             cd /root/snippy-backend
-            git pull --ff-only || true
+            
+            # Make binary executable
             chmod +x snippy-api
-
-            # Start PostgreSQL (if not running)
-            docker-compose up -d postgres
-            sleep 5
-
-            # Stop old API process (best-effort)
-            pkill -f snippy-api || true
-            sleep 1
-
-            # Load environment safely (supports POSIX shell)
-            if [ -f .env.production ]; then
-              echo "Loading .env.production"
-              set -a
-              . .env.production
-              set +a
-            else
-              echo ".env.production not found"
+            
+            # Install systemd service if it doesn't exist
+            if [ ! -f /etc/systemd/system/snippy-backend.service ]; then
+              cp snippy-backend.service /etc/systemd/system/
+              systemctl daemon-reload
+              systemctl enable snippy-backend
             fi
-
-            # Start API with nohup and capture pid
-            nohup ./snippy-api > api.log 2>&1 &
-            API_PID=$!
-            echo "Started snippy-api (pid=$API_PID)"
-
-            # Give the app a few seconds to initialize and produce logs
-            sleep 5
-
-            # Quick diagnostics (always print; helpful when things fail)
-            echo "=== tail -n 200 api.log ==="
-            tail -n 200 api.log || true
-            echo "=== ps aux | grep snippy-api ==="
-            ps aux | grep snippy-api | grep -v grep || true
-            echo "=== dmesg | tail -n 50 ==="
-            dmesg | tail -n 50 || true
-
+            
+            # Restart service (this runs docker-compose)
+            systemctl restart snippy-backend
+            
+            # Wait for services to start
+            sleep 10
+            
+            # Check status
+            systemctl status snippy-backend --no-pager
+            docker-compose ps
+            
             # Health check
-            if curl -sSf http://localhost:8080/health; then
-              echo "✅ Deployment successful!"
+            if curl -f http://localhost:8080/api/v1/health; then
+              echo "✅ Deploy successful"
             else
               echo "❌ Health check failed"
-              echo "Process $API_PID status:"
-              if [ -d /proc/${API_PID} ]; then
-                echo "Process ${API_PID} still exists"
-              else
-                echo "Process ${API_PID} not running"
-              fi
-              echo "=== Last 200 lines of api.log ==="
-              tail -n 200 api.log || true
-              echo "=== dmesg | tail -n 200 ==="
-              dmesg | tail -n 200 || true
-              echo "=== ps aux (full) ==="
-              ps aux || true
+              docker-compose logs --tail=50 api
               exit 1
             fi

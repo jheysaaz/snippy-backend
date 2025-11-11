@@ -39,3 +39,8 @@ Thumbs.db
 
 # Binary output
 snippy-backend
+snippy-api
+
+# Logs
+*.log
+api.log
