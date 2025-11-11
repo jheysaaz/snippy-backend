@@ -21,7 +21,7 @@ linters:
     - noctx # Finds sending http request without context.Context
     - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
     - rowserrcheck # Checks whether Err of rows is checked
-    - exportloopref # Checks for pointers to enclosing loop variables
+    # - exportloopref # Deprecated since Go 1.22 - replaced by copyloopvar
     - gocritic # Provides diagnostics that check for bugs, performance and style issues
     - gocyclo # Computes cyclomatic complexity
     - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go
