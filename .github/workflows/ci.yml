@@ -132,11 +132,11 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build -v -o snippy-backend .
+        run: go build -v -o snippy-api .
 
-      - name: Upload artifact
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: snippy-backend
-          path: snippy-backend
+          name: snippy-api
+          path: snippy-api
           retention-days: 7

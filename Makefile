@@ -60,12 +60,12 @@ lint:
 # Build application
 build:
 	@echo "Building application..."
-	go build -v -o snippy-backend .
+	go build -v -o snippy-api .
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning..."
-	rm -f snippy-backend
+	rm -f snippy-api
 	rm -f coverage.out coverage.html
 	rm -f gosec-report.json
 	go clean

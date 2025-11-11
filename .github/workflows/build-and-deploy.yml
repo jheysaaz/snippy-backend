@@ -30,7 +30,8 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           source: "snippy-api"
-          target: "/root/snippy-backend/"
+          target: "/root/snippy-api/"
+          overwrite: true
           overwrite: true
 
       - name: Copy systemd service file
@@ -39,8 +40,8 @@ jobs:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "snippy-backend.service"
-          target: "/root/snippy-backend/"
+          source: "snippy-api.service"
+          target: "/root/snippy-api/"
           overwrite: true
 
       - name: Copy docker-compose file
@@ -50,7 +51,7 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           source: "docker-compose.yml"
-          target: "/root/snippy-backend/"
+          target: "/root/snippy-api/"
           overwrite: true
 
       - name: Deploy
@@ -60,26 +61,26 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
-            cd /root/snippy-backend
+            cd /root/snippy-api
             
             # Make binary executable
             chmod +x snippy-api
             
             # Install systemd service if it doesn't exist
-            if [ ! -f /etc/systemd/system/snippy-backend.service ]; then
-              cp snippy-backend.service /etc/systemd/system/
+            if [ ! -f /etc/systemd/system/snippy-api.service ]; then
+              cp snippy-api.service /etc/systemd/system/
               systemctl daemon-reload
-              systemctl enable snippy-backend
+              systemctl enable snippy-api
             fi
             
             # Restart service (this runs docker-compose)
-            systemctl restart snippy-backend
+            systemctl restart snippy-api
             
             # Wait for services to start
             sleep 10
             
             # Check status
-            systemctl status snippy-backend --no-pager
+            systemctl status snippy-api --no-pager
             docker-compose ps
             
             # Health check
