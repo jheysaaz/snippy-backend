@@ -1,7 +1,6 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     container_name: snippy-postgres
@@ -10,83 +9,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-snippy}
-      # Performance tuning for production
-      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
-      # Security
-      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     ports:
-      # Only expose to localhost in production (use 127.0.0.1:5432:5432)
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Backup location (optional)
-      - ./backups:/backups
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-snippy}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
-    networks:
-      - snippy-network
-    # Logging
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    # Security options
-    security_opt:
-      - no-new-privileges:true
-    # Read-only root filesystem except for PostgreSQL data
-    tmpfs:
-      - /tmp
-      - /run
-
-  # Snippy API
-  api:
-    image: ghcr.io/jheysaaz/snippy-backend:latest
-    # Fallback to local build if image is not available
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: snippy-api
-    restart: unless-stopped
-    env_file:
-      - .env.production
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-    networks:
-      - snippy-network
-    # Logging
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    # Security options
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
-
-networks:
-  snippy-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
-    driver: local

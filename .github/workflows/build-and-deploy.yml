@@ -1,0 +1,69 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.9"
+
+      - name: Build
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snippy-api .
+
+      - name: Copy binary to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "snippy-api"
+          target: "/root/snippy-backend/"
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd /root/snippy-backend
+            git pull
+            chmod +x snippy-api
+
+            # Start PostgreSQL
+            docker-compose up -d postgres
+            sleep 5
+
+            # Stop old API process
+            pkill -f snippy-api || true
+            sleep 1
+
+            # Load environment and start API
+            source .env.production
+            export $(cat .env.production | grep -v '^#' | xargs)
+            nohup ./snippy-api > api.log 2>&1 &
+
+            # Wait for startup
+            sleep 3
+
+            # Health check
+            if curl -f http://localhost:8080/health; then
+              echo "✅ Deployment successful!"
+            else
+              echo "❌ Health check failed"
+              tail -20 api.log
+              exit 1
+            fi
