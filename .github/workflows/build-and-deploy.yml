@@ -32,7 +32,6 @@ jobs:
           source: "snippy-api"
           target: "/root/snippy-api/"
           overwrite: true
-          overwrite: true
 
       - name: Copy systemd service file
         uses: appleboy/scp-action@v0.1.7
