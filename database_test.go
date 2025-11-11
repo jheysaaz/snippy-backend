@@ -134,15 +134,27 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	if err := initDatabase(); err != nil {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Test inserting data (NEW schema)
+	// Create a test user first
+	var testUserID string
+	err = testDB.QueryRow(`
+		INSERT INTO users (username, email, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, "testuser", "test@example.com", "dummy-hash").Scan(&testUserID)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Test inserting data (NEW schema) with valid user_id
 	_, err = testDB.Exec(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, uuid_generate_v4())
-	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}))
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}), testUserID)
 
 	if err != nil {
 		t.Errorf("Failed to insert test data: %v", err)
@@ -186,15 +198,27 @@ func TestDatabaseTrigger(t *testing.T) {
 
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	if err := initDatabase(); err != nil {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Insert a snippet (NEW schema)
+	// Create a test user first
+	var testUserID string
+	err = testDB.QueryRow(`
+		INSERT INTO users (username, email, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, "testuser", "test@example.com", "dummy-hash").Scan(&testUserID)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Insert a snippet (NEW schema) with valid user_id
 	_, err = testDB.Exec(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, uuid_generate_v4())
-	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}))
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}), testUserID)
 
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)

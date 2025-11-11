@@ -16,9 +16,10 @@ import (
 )
 
 // generateTestJWT creates a valid JWT token for testing
+// The user_id should match the test user created in the database
 func generateTestJWT() string {
 	claims := jwt.MapClaims{
-		"user_id":  "test-user-id",
+		"user_id":  "test-user-123",
 		"username": "testuser",
 		"email":    "test@example.com",
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
@@ -61,10 +62,19 @@ func setupTestDB(t *testing.T) *sql.DB {
 
 	// Clean up test data
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 
 	// Initialize schema with NEW structure (category, shortcut, content)
 	schema := `
 	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+	
+	CREATE TABLE IF NOT EXISTS users (
+		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		username VARCHAR(50) UNIQUE NOT NULL,
+		email VARCHAR(255) UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
 	
 	CREATE TABLE IF NOT EXISTS snippets (
 		id SERIAL PRIMARY KEY,
@@ -74,7 +84,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		shortcut VARCHAR(50),
 		content TEXT NOT NULL,
 		tags TEXT[],
-		user_id UUID,
+		user_id UUID REFERENCES users(id) ON DELETE CASCADE,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
@@ -83,12 +93,23 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to create test schema: %v", err)
 	}
 
+	// Create test user with matching ID from generateTestJWT()
+	_, err = testDB.Exec(`
+		INSERT INTO users (id, username, email, password_hash)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO NOTHING
+	`, "test-user-123", "testuser", "test@example.com", "dummy-hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
 	return testDB
 }
 
 // Clean up test database
 func cleanupTestDB(t *testing.T, testDB *sql.DB) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	testDB.Close()
 }
 
@@ -197,12 +218,13 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	db = testDB
 
 	// Insert test data with NEW schema (category, shortcut, content)
+	// Use the same user_id as in generateTestJWT()
 	_, err := testDB.Exec(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
 		VALUES 
-			('Python Snippet', 'A Python example', 'python', 'py-hello', 'print("hello")', ARRAY['python', 'basics'], uuid_generate_v4()),
-			('JavaScript Snippet', 'A JS example', 'javascript', 'js-hello', 'console.log("hello")', ARRAY['javascript'], uuid_generate_v4())
-	`)
+			('Python Snippet', 'A Python example', 'python', 'py-hello', 'print("hello")', ARRAY['python', 'basics'], $1),
+			('JavaScript Snippet', 'A JS example', 'javascript', 'js-hello', 'console.log("hello")', ARRAY['javascript'], $1)
+	`, "test-user-123")
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
 	}
@@ -279,13 +301,13 @@ func TestGetSingleSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet with NEW schema
+	// Insert test snippet with NEW schema using matching user_id
 	var snippetID int64
 	err := testDB.QueryRow(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ('Test Snippet', 'Description', 'go', 'go-test', 'code here', ARRAY['test'], uuid_generate_v4())
+		VALUES ('Test Snippet', 'Description', 'go', 'go-test', 'code here', ARRAY['test'], $1)
 		RETURNING id
-	`).Scan(&snippetID)
+	`, "test-user-123").Scan(&snippetID)
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
@@ -336,12 +358,12 @@ func TestUpdateSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet with NEW schema
+	// Insert test snippet with NEW schema using matching user_id
 	err := testDB.QueryRow(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ('Original Title', 'Original Description', 'javascript', 'js-orig', 'original code', ARRAY['test'], uuid_generate_v4())
+		VALUES ('Original Title', 'Original Description', 'javascript', 'js-orig', 'original code', ARRAY['test'], $1)
 		RETURNING id
-	`).Scan(new(int64))
+	`, "test-user-123").Scan(new(int64))
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
@@ -411,12 +433,12 @@ func TestDeleteSnippet(t *testing.T) {
 
 	db = testDB
 
-	// Insert test snippet with NEW schema
+	// Insert test snippet with NEW schema using matching user_id
 	err := testDB.QueryRow(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ('To Delete', 'Description', 'go', 'go-delete', 'code', ARRAY['test'], uuid_generate_v4())
+		VALUES ('To Delete', 'Description', 'go', 'go-delete', 'code', ARRAY['test'], $1)
 		RETURNING id
-	`).Scan(new(int64))
+	`, "test-user-123").Scan(new(int64))
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}

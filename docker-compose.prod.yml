@@ -1,0 +1,66 @@
+# Production-specific overrides
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+version: "3.8"
+
+services:
+  postgres:
+    # Don't expose PostgreSQL port externally in production
+    ports: []
+    # Stronger resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    # Add SSL support (requires SSL certificates)
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/etc/ssl/certs/server.crt"
+      - "-c"
+      - "ssl_key_file=/etc/ssl/private/server.key"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=768MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=2621kB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
+
+  api:
+    # Use pre-built image in production
+    image: snippy-api:latest
+    # Stronger resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    # Production environment overrides
+    environment:
+      - GIN_MODE=release

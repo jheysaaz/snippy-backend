@@ -1,0 +1,78 @@
+# Makefile for Docker operations
+
+.PHONY: help build up down restart logs ps clean backup restore
+
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+build: ## Build Docker images
+	docker-compose build --no-cache
+
+up: ## Start services in detached mode
+	docker-compose up -d
+
+up-prod: ## Start services with production overrides
+	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+down: ## Stop and remove containers
+	docker-compose down
+
+restart: ## Restart all services
+	docker-compose restart
+
+logs: ## Show logs (follow mode)
+	docker-compose logs -f
+
+logs-api: ## Show API logs only
+	docker-compose logs -f api
+
+logs-db: ## Show database logs only
+	docker-compose logs -f postgres
+
+ps: ## Show running containers
+	docker-compose ps
+
+clean: ## Remove containers, networks, volumes, and images
+	docker-compose down -v --rmi all
+	docker system prune -f
+
+backup: ## Create database backup
+	@mkdir -p backups
+	@TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
+	docker exec snippy-postgres pg_dump -U $${POSTGRES_USER:-postgres} $${POSTGRES_DB:-snippy} > backups/backup-$$TIMESTAMP.sql && \
+	gzip backups/backup-$$TIMESTAMP.sql && \
+	echo "Backup created: backups/backup-$$TIMESTAMP.sql.gz"
+
+restore: ## Restore database from backup (usage: make restore BACKUP=backups/backup-20250111-120000.sql.gz)
+	@if [ -z "$(BACKUP)" ]; then \
+		echo "Error: Please specify BACKUP file. Example: make restore BACKUP=backups/backup-20250111-120000.sql.gz"; \
+		exit 1; \
+	fi
+	@gunzip < $(BACKUP) | docker exec -i snippy-postgres psql -U $${POSTGRES_USER:-postgres} $${POSTGRES_DB:-snippy}
+	@echo "Database restored from $(BACKUP)"
+
+health: ## Check service health
+	@echo "Checking API health..."
+	@curl -s http://localhost:8080/health | jq . || echo "API not responding"
+	@echo ""
+	@echo "Checking PostgreSQL health..."
+	@docker exec snippy-postgres pg_isready -U $${POSTGRES_USER:-postgres} || echo "PostgreSQL not ready"
+
+shell-api: ## Open shell in API container
+	docker exec -it snippy-api sh
+
+shell-db: ## Open PostgreSQL shell
+	docker exec -it snippy-postgres psql -U $${POSTGRES_USER:-postgres} $${POSTGRES_DB:-snippy}
+
+deploy: ## Deploy to production
+	./deploy.sh production
+
+stats: ## Show container resource usage
+	docker stats --no-stream
+
+update: ## Pull latest code and redeploy
+	git pull origin main
+	./deploy.sh production
