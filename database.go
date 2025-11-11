@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"log"
 )
 
@@ -111,20 +110,4 @@ func initDatabase() error {
 
 	log.Println("Database schema initialized successfully")
 	return nil
-}
-
-// Helper function to convert sql.NullString to string pointer
-func nullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
-}
-
-// Helper function to convert string pointer to sql.NullString
-func ptrToNullString(s *string) sql.NullString {
-	if s != nil {
-		return sql.NullString{String: *s, Valid: true}
-	}
-	return sql.NullString{Valid: false}
 }

@@ -108,7 +108,8 @@ func GenerateRandomToken(length int) (string, error) {
 
 // ValidateOAuthToken validates OAuth tokens from Google or Apple
 // Note: In production, you should verify the token with the OAuth provider's API
-func ValidateOAuthToken(provider, token string) (map[string]string, error) {
+// TODO: Implement actual OAuth token validation
+func ValidateOAuthToken(provider, _ string) error {
 	// This is a placeholder. In production, you need to:
 	// 1. For Google: Verify the token using Google's tokeninfo endpoint
 	// 2. For Apple: Verify the JWT token using Apple's public keys
@@ -118,16 +119,14 @@ func ValidateOAuthToken(provider, token string) (map[string]string, error) {
 	case "google":
 		// Verify with Google's API
 		// https://oauth2.googleapis.com/tokeninfo?id_token=TOKEN
-		return nil, errors.New("Google OAuth validation not implemented - requires API key")
+		return errors.New("Google OAuth validation not implemented - requires API key")
 	case "apple":
 		// Verify Apple's JWT token
 		// Use Apple's public keys to verify the signature
-		return nil, errors.New("Apple OAuth validation not implemented - requires Apple credentials")
+		return errors.New("Apple OAuth validation not implemented - requires Apple credentials")
 	default:
-		return nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
+		return fmt.Errorf("unsupported OAuth provider: %s", provider)
 	}
-
-	// In a real implementation, you would return:
 	// return map[string]string{
 	//     "id": "oauth_user_id",
 	//     "email": "user@example.com",

@@ -13,40 +13,40 @@ func TestSnippetScanFunction(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
+		createdAt   time.Time
+		updatedAt   time.Time
 		name        string
-		id          int64
 		title       string
 		description string
 		category    string
 		shortcut    string
 		content     string
 		tags        []string
-		createdAt   time.Time
-		updatedAt   time.Time
+		id          int64
 	}{
 		{
 			name:        "Complete snippet",
+			createdAt:   now,
+			updatedAt:   now,
+			tags:        []string{"test", "javascript"},
 			id:          1,
 			title:       "Test Snippet",
 			description: "A test description",
 			category:    "development",
 			shortcut:    "test-snippet",
 			content:     "console.log('test');",
-			tags:        []string{"test", "javascript"},
-			createdAt:   now,
-			updatedAt:   now,
 		},
 		{
 			name:        "Snippet with empty tags",
+			createdAt:   now,
+			updatedAt:   now,
+			tags:        []string{},
 			id:          2,
 			title:       "No Tags",
 			description: "",
 			category:    "personal",
 			shortcut:    "hello-world",
 			content:     "print('hello')",
-			tags:        []string{},
-			createdAt:   now,
-			updatedAt:   now,
 		},
 	}
 
@@ -99,7 +99,8 @@ func TestUpdateSnippetRequestValidation(t *testing.T) {
 		hasData bool
 	}{
 		{
-			name: "All fields provided",
+			name:    "All fields provided",
+			hasData: true,
 			request: UpdateSnippetRequest{
 				Title:       stringPtr("New Title"),
 				Description: stringPtr("New Description"),
@@ -108,19 +109,18 @@ func TestUpdateSnippetRequestValidation(t *testing.T) {
 				Content:     stringPtr("new content"),
 				Tags:        []string{"tag1", "tag2"},
 			},
-			hasData: true,
 		},
 		{
-			name: "Only title provided",
+			name:    "Only title provided",
+			hasData: true,
 			request: UpdateSnippetRequest{
 				Title: stringPtr("Only Title"),
 			},
-			hasData: true,
 		},
 		{
 			name:    "No fields provided",
-			request: UpdateSnippetRequest{},
 			hasData: false,
+			request: UpdateSnippetRequest{},
 		},
 	}
 
@@ -142,16 +142,16 @@ func TestUpdateSnippetRequestValidation(t *testing.T) {
 
 // Mock scanner for testing
 type mockScanner struct {
-	id          int64
+	createdAt   time.Time
+	updatedAt   time.Time
+	userID      *string
 	title       string
 	description string
 	category    string
 	shortcut    string
 	content     string
 	tags        pq.StringArray
-	userID      *string
-	createdAt   time.Time
-	updatedAt   time.Time
+	id          int64
 }
 
 func (m *mockScanner) Scan(dest ...interface{}) error {

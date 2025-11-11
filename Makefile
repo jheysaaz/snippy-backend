@@ -61,7 +61,9 @@ test-with-db: test-db-up
 	@echo "Waiting for database to be fully ready..."
 	@sleep 2
 	@echo "Running tests with database..."
-	@set -a; . ./.env.test; set +a; go test -v -race ./...
+	@DATABASE_URL="postgres://test_user:test_password@localhost:5433/snippy_test?sslmode=disable" \
+	 JWT_SECRET="test-jwt-secret-key-for-testing-only" \
+	 go test -v -race ./...
 	@echo ""
 	@echo "Tests completed. To stop the database, run: make test-db-down"
 

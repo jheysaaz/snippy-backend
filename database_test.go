@@ -42,7 +42,7 @@ func TestInitDatabase(t *testing.T) {
 	}
 	defer testDB.Close()
 
-	if err := testDB.Ping(); err != nil {
+	if pingErr := testDB.Ping(); pingErr != nil {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
@@ -53,15 +53,15 @@ func TestInitDatabase(t *testing.T) {
 	db = testDB
 
 	// Test schema initialization
-	if err := initDatabase(); err != nil {
-		t.Fatalf("initDatabase failed: %v", err)
+	if initErr := initDatabase(); initErr != nil {
+		t.Fatalf("initDatabase failed: %v", initErr)
 	}
 
 	// Verify table exists
 	var exists bool
 	err = testDB.QueryRow(`
 		SELECT EXISTS (
-			SELECT FROM information_schema.tables 
+			SELECT FROM information_schema.tables
 			WHERE table_name = 'snippets'
 		)
 	`).Scan(&exists)
@@ -80,7 +80,7 @@ func TestInitDatabase(t *testing.T) {
 		var colExists bool
 		err = testDB.QueryRow(`
 			SELECT EXISTS (
-				SELECT FROM information_schema.columns 
+				SELECT FROM information_schema.columns
 				WHERE table_name = 'snippets' AND column_name = $1
 			)
 		`, col).Scan(&colExists)
@@ -100,7 +100,7 @@ func TestInitDatabase(t *testing.T) {
 		var idxExists bool
 		err = testDB.QueryRow(`
 			SELECT EXISTS (
-				SELECT FROM pg_indexes 
+				SELECT FROM pg_indexes
 				WHERE tablename = 'snippets' AND indexname = $1
 			)
 		`, idx).Scan(&idxExists)
@@ -126,7 +126,7 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 	}
 	defer testDB.Close()
 
-	if err := testDB.Ping(); err != nil {
+	if pingErr := testDB.Ping(); pingErr != nil {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
@@ -137,8 +137,8 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
-	if err := initDatabase(); err != nil {
-		t.Fatalf("initDatabase failed: %v", err)
+	if initErr := initDatabase(); initErr != nil {
+		t.Fatalf("initDatabase failed: %v", initErr)
 	}
 
 	// Create a test user with unique username
@@ -194,7 +194,7 @@ func TestDatabaseTrigger(t *testing.T) {
 	}
 	defer testDB.Close()
 
-	if err := testDB.Ping(); err != nil {
+	if pingErr := testDB.Ping(); pingErr != nil {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
@@ -204,8 +204,8 @@ func TestDatabaseTrigger(t *testing.T) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
-	if err := initDatabase(); err != nil {
-		t.Fatalf("initDatabase failed: %v", err)
+	if initErr := initDatabase(); initErr != nil {
+		t.Fatalf("initDatabase failed: %v", initErr)
 	}
 
 	// Create a test user first with unique data

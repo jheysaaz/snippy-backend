@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -59,7 +60,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Skip("Skipping integration tests: PostgreSQL not available")
 	}
 
-	if err := testDB.Ping(); err != nil {
+	if pingErr := testDB.Ping(); pingErr != nil {
 		t.Skip("Skipping integration tests: Cannot connect to PostgreSQL")
 	}
 
@@ -70,7 +71,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 	// Initialize schema with NEW structure (category, shortcut, content)
 	schema := `
 	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-	
+
 	CREATE TABLE IF NOT EXISTS users (
 		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 		username VARCHAR(50) UNIQUE NOT NULL,
@@ -78,7 +79,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		password_hash TEXT NOT NULL,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
-	
+
 	CREATE TABLE IF NOT EXISTS snippets (
 		id SERIAL PRIMARY KEY,
 		title VARCHAR(255) NOT NULL,
@@ -92,8 +93,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 	`
-	if _, err := testDB.Exec(schema); err != nil {
-		t.Fatalf("Failed to create test schema: %v", err)
+	if _, execErr := testDB.Exec(schema); execErr != nil {
+		t.Fatalf("Failed to create test schema: %v", execErr)
 	}
 
 	// Create test user with matching ID from generateTestJWT()
@@ -110,7 +111,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 }
 
 // Clean up test database
-func cleanupTestDB(t *testing.T, testDB *sql.DB) {
+func cleanupTestDB(_ *testing.T, testDB *sql.DB) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	testDB.Close()
@@ -124,7 +125,7 @@ func TestHealthEndpoint(t *testing.T) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	req, _ := http.NewRequest("GET", "/api/v1/health", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/v1/health", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -198,7 +199,7 @@ func TestCreateSnippetValidation(t *testing.T) {
 			// Add auth middleware for create endpoint
 			router.POST("/api/v1/snippets", AuthMiddleware(), createSnippet)
 
-			req, _ := http.NewRequest("POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
+			req, _ := http.NewRequestWithContext(context.Background(), "POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
@@ -224,7 +225,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	// Use the same user_id as in generateTestJWT()
 	_, err := testDB.Exec(`
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES 
+		VALUES
 			('Python Snippet', 'A Python example', 'python', 'py-hello', 'print("hello")', ARRAY['python', 'basics'], $1),
 			('JavaScript Snippet', 'A JS example', 'javascript', 'js-hello', 'console.log("hello")', ARRAY['javascript'], $1)
 	`, testUserID)
@@ -273,7 +274,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "/api/v1/snippets"+tt.queryParams, nil)
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/v1/snippets"+tt.queryParams, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -342,7 +343,7 @@ func TestGetSingleSnippet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "/api/v1/snippets/"+tt.snippetID, nil)
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/v1/snippets/"+tt.snippetID, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -415,7 +416,7 @@ func TestUpdateSnippet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("PUT", "/api/v1/snippets/"+tt.snippetID, bytes.NewBufferString(tt.payload))
+			req, _ := http.NewRequestWithContext(context.Background(), "PUT", "/api/v1/snippets/"+tt.snippetID, bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
@@ -473,7 +474,7 @@ func TestDeleteSnippet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("DELETE", "/api/v1/snippets/"+tt.snippetID, nil)
+			req, _ := http.NewRequestWithContext(context.Background(), "DELETE", "/api/v1/snippets/"+tt.snippetID, nil)
 			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -500,7 +501,7 @@ func TestCORSMiddleware(t *testing.T) {
 	})
 
 	// Test OPTIONS request
-	req, _ := http.NewRequest("OPTIONS", "/test", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "OPTIONS", "/test", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -509,7 +510,7 @@ func TestCORSMiddleware(t *testing.T) {
 	}
 
 	// Test CORS headers
-	req, _ = http.NewRequest("GET", "/test", nil)
+	req, _ = http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

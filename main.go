@@ -49,8 +49,9 @@ func main() {
 
 	// Ensure cleanup on exit
 	defer func() {
-		if err := db.Close(); err != nil {
-			log.Println("Error closing database connection:", err)
+		closeErr := db.Close()
+		if closeErr != nil {
+			log.Println("Error closing database connection:", closeErr)
 		}
 	}()
 
@@ -130,7 +131,8 @@ func main() {
 
 	log.Printf("Server starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
-		log.Fatal("Failed to start server:", err)
+		log.Printf("Failed to start server: %v", err)
+		return
 	}
 }
 

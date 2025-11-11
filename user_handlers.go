@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -124,11 +125,12 @@ func createUser(c *gin.Context) {
 	if err != nil {
 		// Check for unique constraint violation
 		if strings.Contains(err.Error(), "duplicate key") {
-			if strings.Contains(err.Error(), "username") {
+			switch {
+			case strings.Contains(err.Error(), "username"):
 				c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
-			} else if strings.Contains(err.Error(), "email") {
+			case strings.Contains(err.Error(), "email"):
 				c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
-			} else {
+			default:
 				c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 			}
 			return
@@ -138,6 +140,44 @@ func createUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, user)
+}
+
+// buildUserUpdateQuery constructs the dynamic UPDATE query for user updates
+func buildUserUpdateQuery(req *UpdateUserRequest) ([]string, []interface{}, error) {
+	updates := []string{}
+	args := []interface{}{}
+	argPos := 1
+
+	if req.Username != nil {
+		updates = append(updates, "username = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Username)
+		argPos++
+	}
+	if req.Email != nil {
+		updates = append(updates, "email = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Email)
+		argPos++
+	}
+	if req.Password != nil && *req.Password != "" {
+		hash, err := HashPassword(*req.Password)
+		if err != nil {
+			return nil, nil, err
+		}
+		updates = append(updates, "password_hash = $"+strconv.Itoa(argPos))
+		args = append(args, hash)
+		argPos++
+	}
+	if req.FullName != nil {
+		updates = append(updates, "full_name = $"+strconv.Itoa(argPos))
+		args = append(args, *req.FullName)
+		argPos++
+	}
+	if req.AvatarURL != nil {
+		updates = append(updates, "avatar_url = $"+strconv.Itoa(argPos))
+		args = append(args, *req.AvatarURL)
+	}
+
+	return updates, args, nil
 }
 
 // updateUser updates an existing user
@@ -164,41 +204,10 @@ func updateUser(c *gin.Context) {
 	}
 
 	// Build dynamic UPDATE query based on provided fields
-	updates := []string{}
-	args := []interface{}{}
-	argPos := 1
-
-	if req.Username != nil {
-		updates = append(updates, "username = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Username)
-		argPos++
-	}
-	if req.Email != nil {
-		updates = append(updates, "email = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Email)
-		argPos++
-	}
-	if req.Password != nil && *req.Password != "" {
-		// Hash the new password
-		hash, err := HashPassword(*req.Password)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
-			return
-		}
-		updates = append(updates, "password_hash = $"+strconv.Itoa(argPos))
-		args = append(args, hash)
-		argPos++
-
-	}
-	if req.FullName != nil {
-		updates = append(updates, "full_name = $"+strconv.Itoa(argPos))
-		args = append(args, *req.FullName)
-		argPos++
-	}
-	if req.AvatarURL != nil {
-		updates = append(updates, "avatar_url = $"+strconv.Itoa(argPos))
-		args = append(args, *req.AvatarURL)
-		argPos++
+	updates, args, err := buildUserUpdateQuery(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		return
 	}
 
 	if len(updates) == 0 {
@@ -208,6 +217,7 @@ func updateUser(c *gin.Context) {
 
 	// Add ID as last argument
 	args = append(args, id)
+	argPos := len(args)
 
 	query := `
 		UPDATE users
@@ -225,11 +235,12 @@ func updateUser(c *gin.Context) {
 	if err != nil {
 		// Check for unique constraint violation
 		if strings.Contains(err.Error(), "duplicate key") {
-			if strings.Contains(err.Error(), "username") {
+			switch {
+			case strings.Contains(err.Error(), "username"):
 				c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
-			} else if strings.Contains(err.Error(), "email") {
+			case strings.Contains(err.Error(), "email"):
 				c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
-			} else {
+			default:
 				c.JSON(http.StatusConflict, gin.H{"error": "Duplicate value"})
 			}
 			return
@@ -392,11 +403,12 @@ func refreshAccessToken(c *gin.Context) {
 	// Validate refresh token
 	rt, err := validateRefreshToken(req.RefreshToken)
 	if err != nil {
-		if err == ErrTokenExpired {
+		switch err {
+		case ErrTokenExpired:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired, please login again"})
-		} else if err == ErrTokenRevoked {
+		case ErrTokenRevoked:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token revoked, please login again"})
-		} else {
+		default:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		}
 		return
@@ -463,7 +475,13 @@ func logoutAll(c *gin.Context) {
 	}
 
 	// Revoke all tokens for this user
-	if err := revokeAllUserTokens(userID.(string)); err != nil {
+	userIDStr, ok := userID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID type"})
+		return
+	}
+	if err := revokeAllUserTokens(userIDStr); err != nil {
+		log.Printf("Failed to revoke all tokens for user %v: %v", userIDStr, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout from all devices"})
 		return
 	}

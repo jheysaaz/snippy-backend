@@ -9,16 +9,16 @@ import (
 
 // Snippet represents a code snippet
 type Snippet struct {
-	ID          int64     `json:"id" db:"id"`
+	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	UserID      *string   `json:"userId,omitempty" db:"user_id"`
 	Title       string    `json:"title" db:"title"`
 	Description string    `json:"description,omitempty" db:"description"`
 	Category    string    `json:"category" db:"category"`
-	Shortcut    string    `json:"shortcut" db:"shortcut"` // Short string without spaces
+	Shortcut    string    `json:"shortcut" db:"shortcut"`
 	Content     string    `json:"content" db:"content"`
 	Tags        []string  `json:"tags" db:"tags"`
-	UserID      *string   `json:"userId,omitempty" db:"user_id"` // UUID as string
-	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	ID          int64     `json:"id" db:"id"`
 }
 
 // CreateSnippetRequest for creating a new snippet
@@ -39,8 +39,8 @@ type UpdateSnippetRequest struct {
 	Category    *string  `json:"category,omitempty"`
 	Shortcut    *string  `json:"shortcut,omitempty"`
 	Content     *string  `json:"content,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
 	UserID      *string  `json:"userId,omitempty"` // UUID as string
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // scanSnippet scans a database row into a Snippet struct
@@ -79,13 +79,13 @@ func scanSnippet(scanner interface {
 // User represents a user in the system
 type User struct {
 	ID           string    `json:"id"` // UUID as string
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 	Username     string    `json:"username"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"` // Never expose password hash in JSON
 	FullName     string    `json:"fullName"`
 	AvatarURL    string    `json:"avatarUrl"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // CreateUserRequest for creating a new user
@@ -125,12 +125,12 @@ type RefreshTokenResponse struct {
 // RefreshToken database model
 type RefreshToken struct {
 	ID         string    `json:"id"`
-	UserID     string    `json:"userId"`
-	Token      string    `json:"token"`
 	ExpiresAt  time.Time `json:"expiresAt"`
 	CreatedAt  time.Time `json:"createdAt"`
-	Revoked    bool      `json:"revoked"`
+	UserID     string    `json:"userId"`
+	Token      string    `json:"token"`
 	DeviceInfo string    `json:"deviceInfo,omitempty"`
+	Revoked    bool      `json:"revoked"`
 }
 
 // UpdateUserRequest for updating an existing user

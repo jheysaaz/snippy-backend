@@ -160,6 +160,45 @@ func createSnippet(c *gin.Context) {
 	c.JSON(http.StatusCreated, snippet)
 }
 
+// buildSnippetUpdateQuery constructs the dynamic UPDATE query for snippet updates
+func buildSnippetUpdateQuery(req *UpdateSnippetRequest) ([]string, []interface{}) {
+	updates := []string{}
+	args := []interface{}{}
+	argPos := 1
+
+	if req.Title != nil {
+		updates = append(updates, "title = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Title)
+		argPos++
+	}
+	if req.Description != nil {
+		updates = append(updates, "description = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Description)
+		argPos++
+	}
+	if req.Category != nil {
+		updates = append(updates, "category = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Category)
+		argPos++
+	}
+	if req.Shortcut != nil {
+		updates = append(updates, "shortcut = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Shortcut)
+		argPos++
+	}
+	if req.Content != nil {
+		updates = append(updates, "content = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Content)
+		argPos++
+	}
+	if req.Tags != nil {
+		updates = append(updates, "tags = $"+strconv.Itoa(argPos))
+		args = append(args, pq.Array(req.Tags))
+	}
+
+	return updates, args
+}
+
 // updateSnippet updates an existing snippet
 func updateSnippet(c *gin.Context) {
 	idStr := c.Param("id")
@@ -196,46 +235,13 @@ func updateSnippet(c *gin.Context) {
 	}
 
 	var req UpdateSnippetRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": bindErr.Error()})
 		return
 	}
 
 	// Build dynamic UPDATE query based on provided fields
-	updates := []string{}
-	args := []interface{}{}
-	argPos := 1
-
-	if req.Title != nil {
-		updates = append(updates, "title = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Title)
-		argPos++
-	}
-	if req.Description != nil {
-		updates = append(updates, "description = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Description)
-		argPos++
-	}
-	if req.Category != nil {
-		updates = append(updates, "category = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Category)
-		argPos++
-	}
-	if req.Shortcut != nil {
-		updates = append(updates, "shortcut = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Shortcut)
-		argPos++
-	}
-	if req.Content != nil {
-		updates = append(updates, "content = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Content)
-		argPos++
-	}
-	if req.Tags != nil {
-		updates = append(updates, "tags = $"+strconv.Itoa(argPos))
-		args = append(args, pq.Array(req.Tags))
-		argPos++
-	}
+	updates, args := buildSnippetUpdateQuery(&req)
 
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
@@ -244,6 +250,7 @@ func updateSnippet(c *gin.Context) {
 
 	// Add ID as last argument
 	args = append(args, id)
+	argPos := len(args)
 
 	query := `
 		UPDATE snippets
