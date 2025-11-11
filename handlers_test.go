@@ -30,13 +30,13 @@ func generateTestJWT() string {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	
+
 	// Use test secret or default
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		secret = "test-secret-key-for-ci-only"
 	}
-	
+
 	tokenString, _ := token.SignedString([]byte(secret))
 	return tokenString
 }
@@ -487,11 +487,11 @@ func TestDeleteSnippet(t *testing.T) {
 
 func TestCORSMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	// Set CORS env for test
 	os.Setenv("CORS_ALLOWED_ORIGINS", "*")
 	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
-	
+
 	router := gin.New()
 	router.Use(corsMiddleware())
 

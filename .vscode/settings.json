@@ -1,0 +1,48 @@
+{
+  // Go language settings
+  "go.formatTool": "gofmt",
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": ["--fast"],
+  "go.useLanguageServer": true,
+  "go.toolsManagement.autoUpdate": true,
+
+  // Format on save
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "golang.go"
+  },
+
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": false,
+  "editor.detectIndentation": false,
+
+  // Files settings
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+
+  // Exclude files from explorer
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/coverage.out": true,
+    "**/coverage.html": true,
+    "**/gosec-report.json": true
+  },
+
+  // Go test settings
+  "go.testFlags": ["-v"],
+  "go.testTimeout": "30s",
+  "go.coverOnSave": false,
+  "go.coverageDecorator": {
+    "type": "gutter",
+    "coveredHighlightColor": "rgba(64,128,64,0.5)",
+    "uncoveredHighlightColor": "rgba(128,64,64,0.5)"
+  }
+}
