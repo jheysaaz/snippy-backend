@@ -45,9 +45,7 @@ services:
 
   # Snippy API
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/jheysaaz/snippy-backend:latest
     container_name: snippy-api
     restart: unless-stopped
     env_file:

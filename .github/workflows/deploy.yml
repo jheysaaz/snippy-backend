@@ -1,7 +1,10 @@
 name: Deploy to DigitalOcean
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch: # Allow manual triggering
@@ -10,11 +13,9 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Deploy to DigitalOcean Droplet
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -30,7 +31,15 @@ jobs:
             echo "📥 Pulling latest changes from GitHub..."
             git pull origin main
 
-            # Run deployment script
+            # Log in to GitHub Container Registry
+            echo "🔐 Logging in to GitHub Container Registry..."
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the latest image
+            echo "📦 Pulling latest Docker image..."
+            docker pull ghcr.io/${{ github.repository }}:latest
+
+            # Run deployment script (will use pre-built image)
             echo "🚀 Running deployment script..."
             chmod +x deploy.sh
             ./deploy.sh production

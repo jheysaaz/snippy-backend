@@ -42,11 +42,9 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
-echo "📦 Building Docker images with BuildKit..."
-# Use BuildKit for faster, more efficient builds
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
-docker-compose -f $COMPOSE_FILE build --progress=plain
+echo "📦 Pulling latest Docker images..."
+# No need to build - images are pre-built in GitHub Actions
+docker-compose -f $COMPOSE_FILE pull
 
 echo "🔄 Stopping existing containers..."
 docker-compose -f $COMPOSE_FILE -f $PROD_FILE down

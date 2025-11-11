@@ -2,6 +2,184 @@
 
 This document describes the continuous integration and deployment setup for Snippy Backend.
 
+## Overview
+
+The project uses two main workflows:
+1. **Build and Push** - Builds Docker images on GitHub infrastructure
+2. **Deploy** - Deploys pre-built images to DigitalOcean droplet
+
+This approach **saves your droplet's resources** by building in the cloud instead of on your server.
+
+## Build and Push Workflow
+
+### How It Works
+
+**File**: `.github/workflows/build.yml`
+
+**Triggers**:
+- Push to `main` branch
+- Manual workflow dispatch
+
+**Process**:
+1. Checks out code
+2. Logs in to GitHub Container Registry (GHCR)
+3. Builds Docker image using GitHub's infrastructure
+4. Pushes image to `ghcr.io/jheysaaz/snippy-backend:latest`
+5. Uses layer caching for faster subsequent builds
+
+**Benefits**:
+- ✅ Free builds using GitHub's powerful servers
+- ✅ No resource usage on your droplet
+- ✅ Fast builds with caching
+- ✅ Automatic versioning with SHA tags
+
+### Required Permissions
+
+The workflow uses `GITHUB_TOKEN` (automatically provided) with these permissions:
+- `contents: read` - Read repository code
+- `packages: write` - Push to GitHub Container Registry
+
+## Deployment Workflow
+
+### How It Works
+
+**File**: `.github/workflows/deploy.yml`
+
+**Triggers**:
+- After successful completion of Build and Push workflow
+- Manual workflow dispatch
+
+**Process**:
+1. Waits for build workflow to complete successfully
+2. SSH into your DigitalOcean droplet
+3. Pulls latest code from GitHub
+4. Logs in to GHCR
+5. Pulls the pre-built Docker image
+6. Runs `deploy.sh` to restart containers
+7. Verifies API health
+
+**Benefits**:
+- ✅ Droplet only pulls and runs (no building)
+- ✅ Fast deployment (~30 seconds)
+- ✅ Automatic health checks
+- ✅ Works on small droplets (512MB-1GB)
+
+### Required GitHub Secrets
+
+Add these in: **Settings → Secrets and variables → Actions**
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `DROPLET_HOST` | Droplet IP address | `164.92.xxx.xxx` |
+| `DROPLET_USERNAME` | SSH username | `root` |
+| `DROPLET_SSH_KEY` | Private SSH key | Contents of `~/.ssh/id_rsa` |
+| `DROPLET_PORT` | SSH port (optional) | `22` |
+| `GHCR_TOKEN` | GitHub Personal Access Token | `ghp_xxx...` |
+
+### Creating GHCR_TOKEN
+
+1. Go to: **GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)**
+2. Click **"Generate new token (classic)"**
+3. Name: `Snippy Backend GHCR`
+4. Expiration: Choose duration (recommend 1 year)
+5. Select scopes:
+   - ✅ `write:packages`
+   - ✅ `read:packages`
+   - ✅ `delete:packages`
+6. Click **"Generate token"**
+7. **Copy the token immediately** (you won't see it again!)
+8. Add to repository secrets as `GHCR_TOKEN`
+
+## Droplet Setup
+
+### One-Time Docker Registry Authentication
+
+SSH into your droplet and authenticate with GHCR:
+
+```bash
+# SSH into droplet
+ssh root@your-droplet-ip
+
+# Log in to GitHub Container Registry
+echo "YOUR_GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+This creates `~/.docker/config.json` with auth credentials that persist across deployments.
+
+### Project Setup on Droplet
+
+```bash
+# Clone repository (if not already done)
+cd /root
+git clone https://github.com/jheysaaz/snippy-backend.git
+cd snippy-backend
+
+# Create production environment file
+cp .env.example .env.production
+nano .env.production  # Edit with your settings
+
+# Make deploy script executable
+chmod +x deploy.sh
+
+# Initial deployment
+./deploy.sh production
+```
+
+## Resource Requirements
+
+### Before (Building on Droplet)
+- **Required**: 2GB+ RAM, 2 CPU
+- **Cost**: $12-18/month
+- **Build Time**: 3-5 minutes
+- **Freezing**: Common on small droplets
+
+### After (Building on GitHub)
+- **Required**: 512MB-1GB RAM, 1 CPU
+- **Cost**: $4-12/month
+- **Deploy Time**: 30 seconds
+- **Freezing**: None! 🎉
+
+**Savings**: $6-8/month + Better performance
+
+## Deployment Files
+
+### docker-compose.yml
+
+Updated to use pre-built image:
+
+```yaml
+services:
+  api:
+    image: ghcr.io/jheysaaz/snippy-backend:latest  # Pull from registry
+    # No build section - image is pre-built
+```
+
+### deploy.sh
+
+Updated to skip building:
+
+```bash
+# OLD: Build on droplet (slow, resource-intensive)
+# docker-compose build
+
+# NEW: Just pull pre-built image (fast, minimal resources)
+docker-compose pull
+```
+
+## Workflow Sequence
+
+```mermaid
+graph LR
+    A[Push to main] --> B[Build Workflow]
+    B --> C[Build Docker Image]
+    C --> D[Push to GHCR]
+    D --> E[Deploy Workflow]
+    E --> F[SSH to Droplet]
+    F --> G[Pull Image]
+    G --> H[Restart Containers]
+    H --> I[Health Check]
+```
+
 ## GitHub Actions Workflows
 
 ### CI Workflow (`.github/workflows/ci.yml`)
