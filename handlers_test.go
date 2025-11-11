@@ -15,11 +15,14 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// Test user UUID - consistent across all tests
+const testUserID = "123e4567-e89b-12d3-a456-426614174000"
+
 // generateTestJWT creates a valid JWT token for testing
 // The user_id should match the test user created in the database
 func generateTestJWT() string {
 	claims := jwt.MapClaims{
-		"user_id":  "test-user-123",
+		"user_id":  testUserID,
 		"username": "testuser",
 		"email":    "test@example.com",
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
@@ -98,7 +101,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		INSERT INTO users (id, username, email, password_hash)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (id) DO NOTHING
-	`, "test-user-123", "testuser", "test@example.com", "dummy-hash")
+	`, testUserID, "testuser", "test@example.com", "dummy-hash")
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
@@ -224,7 +227,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 		VALUES 
 			('Python Snippet', 'A Python example', 'python', 'py-hello', 'print("hello")', ARRAY['python', 'basics'], $1),
 			('JavaScript Snippet', 'A JS example', 'javascript', 'js-hello', 'console.log("hello")', ARRAY['javascript'], $1)
-	`, "test-user-123")
+	`, testUserID)
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
 	}
@@ -307,7 +310,7 @@ func TestGetSingleSnippet(t *testing.T) {
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
 		VALUES ('Test Snippet', 'Description', 'go', 'go-test', 'code here', ARRAY['test'], $1)
 		RETURNING id
-	`, "test-user-123").Scan(&snippetID)
+	`, testUserID).Scan(&snippetID)
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
@@ -363,7 +366,7 @@ func TestUpdateSnippet(t *testing.T) {
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
 		VALUES ('Original Title', 'Original Description', 'javascript', 'js-orig', 'original code', ARRAY['test'], $1)
 		RETURNING id
-	`, "test-user-123").Scan(new(int64))
+	`, testUserID).Scan(new(int64))
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
@@ -438,7 +441,7 @@ func TestDeleteSnippet(t *testing.T) {
 		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
 		VALUES ('To Delete', 'Description', 'go', 'go-delete', 'code', ARRAY['test'], $1)
 		RETURNING id
-	`, "test-user-123").Scan(new(int64))
+	`, testUserID).Scan(new(int64))
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}

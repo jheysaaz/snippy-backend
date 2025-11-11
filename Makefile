@@ -1,10 +1,15 @@
-.PHONY: help test test-coverage security format lint build clean all
+.PHONY: help test test-coverage test-db-up test-db-down test-db-logs test-with-db test-clean security format lint build clean all
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  make test           - Run tests"
+	@echo "  make test           - Run tests (skips DB tests if no connection)"
 	@echo "  make test-coverage  - Run tests with coverage report"
+	@echo "  make test-db-up     - Start test database container"
+	@echo "  make test-db-down   - Stop test database container"
+	@echo "  make test-db-logs   - Show test database logs"
+	@echo "  make test-with-db   - Start DB and run all tests"
+	@echo "  make test-clean     - Stop DB and clean up volumes"
 	@echo "  make security       - Run security scans (gosec + govulncheck)"
 	@echo "  make format         - Format code with gofmt"
 	@echo "  make format-check   - Check if code is formatted"
@@ -13,17 +18,58 @@ help:
 	@echo "  make clean          - Clean build artifacts"
 	@echo "  make all            - Run all checks (format, lint, security, test, build)"
 
-# Run tests
+# Run tests (will skip DB tests if no connection)
 test:
 	@echo "Running tests..."
-	go test -v -race ./...
+	@if [ -f .env.test ]; then \
+		set -a; . ./.env.test; set +a; go test -v -race ./...; \
+	else \
+		go test -v -race ./...; \
+	fi
 
 # Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-	go tool cover -html=coverage.out -o coverage.html
+	@if [ -f .env.test ]; then \
+		set -a; . ./.env.test; set +a; go test -v -race -coverprofile=coverage.out -covermode=atomic ./...; \
+	else \
+		go test -v -race -coverprofile=coverage.out -covermode=atomic ./...; \
+	fi
+	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
+
+# Start test database
+test-db-up:
+	@echo "Starting test database..."
+	docker-compose -f docker-compose.test.yml up -d
+	@echo "Waiting for database to be ready..."
+	@sleep 3
+	@echo "Test database is ready on port 5433"
+
+# Stop test database
+test-db-down:
+	@echo "Stopping test database..."
+	docker-compose -f docker-compose.test.yml down
+
+# Show test database logs
+test-db-logs:
+	@echo "Showing test database logs..."
+	docker-compose -f docker-compose.test.yml logs -f
+
+# Run tests with database
+test-with-db: test-db-up
+	@echo "Waiting for database to be fully ready..."
+	@sleep 2
+	@echo "Running tests with database..."
+	@set -a; . ./.env.test; set +a; go test -v -race ./...
+	@echo ""
+	@echo "Tests completed. To stop the database, run: make test-db-down"
+
+# Clean test database and volumes
+test-clean: test-db-down
+	@echo "Cleaning up test database..."
+	@docker volume prune -f
+	@echo "Cleanup completed"
 
 # Run security scans
 security: security-gosec security-govulncheck

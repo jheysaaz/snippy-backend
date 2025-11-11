@@ -1,0 +1,21 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: snippy-postgres-test
+    env_file:
+      - .env.test
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      # Override if needed
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: snippy_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d snippy_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    tmpfs:
+      # Use tmpfs for faster tests (data is stored in RAM)
+      - /var/lib/postgresql/data

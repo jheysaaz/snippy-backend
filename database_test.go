@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -135,17 +136,20 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 	if err := initDatabase(); err != nil {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Create a test user first
+	// Create a test user with unique username
+	username := "testuser_schema_" + time.Now().Format("20060102150405")
+	email := username + "@example.com"
 	var testUserID string
 	err = testDB.QueryRow(`
 		INSERT INTO users (username, email, password_hash)
 		VALUES ($1, $2, $3)
 		RETURNING id
-	`, "testuser", "test@example.com", "dummy-hash").Scan(&testUserID)
+	`, username, email, "dummy-hash").Scan(&testUserID)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
@@ -198,18 +202,21 @@ func TestDatabaseTrigger(t *testing.T) {
 
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	if err := initDatabase(); err != nil {
 		t.Fatalf("initDatabase failed: %v", err)
 	}
 
-	// Create a test user first
+	// Create a test user first with unique data
 	var testUserID string
+	username := "testuser_" + time.Now().Format("20060102150405")
+	email := username + "@example.com"
 	err = testDB.QueryRow(`
 		INSERT INTO users (username, email, password_hash)
 		VALUES ($1, $2, $3)
 		RETURNING id
-	`, "testuser", "test@example.com", "dummy-hash").Scan(&testUserID)
+	`, username, email, "dummy-hash").Scan(&testUserID)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
