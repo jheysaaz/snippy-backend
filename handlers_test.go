@@ -6,16 +6,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
 
+// getTestDBURL returns the database URL for testing
+// Checks environment variable first, falls back to default
+func getHandlersTestDBURL() string {
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		return dbURL
+	}
+	return "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+}
+
 // Setup test database connection
 func setupTestDB(t *testing.T) *sql.DB {
 	// Use test database URL or skip if not available
-	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	dbURL := getHandlersTestDBURL()
 	testDB, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Skip("Skipping integration tests: PostgreSQL not available")

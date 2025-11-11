@@ -2,14 +2,24 @@ package main
 
 import (
 	"database/sql"
+	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
 )
 
+// getTestDBURL returns the database URL for testing
+// Checks environment variable first, falls back to default
+func getTestDBURL() string {
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		return dbURL
+	}
+	return "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+}
+
 func TestDatabaseConnection(t *testing.T) {
 	// Skip if no database available
-	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	dbURL := getTestDBURL()
 	testDB, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Skip("Skipping database tests: PostgreSQL not available")
@@ -24,7 +34,7 @@ func TestDatabaseConnection(t *testing.T) {
 }
 
 func TestInitDatabase(t *testing.T) {
-	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	dbURL := getTestDBURL()
 	testDB, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Skip("Skipping database tests: PostgreSQL not available")
@@ -108,7 +118,7 @@ func TestInitDatabase(t *testing.T) {
 }
 
 func TestDatabaseSchemaIntegrity(t *testing.T) {
-	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	dbURL := getTestDBURL()
 	testDB, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Skip("Skipping database tests: PostgreSQL not available")
@@ -161,7 +171,7 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 }
 
 func TestDatabaseTrigger(t *testing.T) {
-	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	dbURL := getTestDBURL()
 	testDB, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Skip("Skipping database tests: PostgreSQL not available")

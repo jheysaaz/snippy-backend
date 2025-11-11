@@ -1,6 +1,6 @@
 module github.com/jheysaaz/snippy-backend
 
-go 1.24.1
+go 1.24.9
 
 require (
 	github.com/gin-gonic/gin v1.11.0
