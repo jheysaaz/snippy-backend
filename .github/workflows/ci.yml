@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
+    tags-ignore:
+      - 'v*.*.*'  # Don't run CI on tags (deploy workflow handles that)
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
 
 permissions:
   contents: read

@@ -1,27 +1,108 @@
 name: Build and Deploy
 
 on:
-  push:
-    branches:
-      - main
+  # Only deploy manually or on version tags
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+  push:
+    tags:
+      - 'v*.*.*'  # Deploy on version tags like v1.0.0
 
 jobs:
-  deploy:
-    name: Build and Deploy
+  # Step 1: Run all tests and security checks
+  test:
+    name: Run Tests & Security
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.9"
+          cache: true
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable
+          JWT_SECRET: test-secret-key
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.61.0
+          args: --timeout=5m
+
+      - name: Run security scan
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...
+
+  # Step 2: Build binary (only if tests pass)
+  build:
+    name: Build Binary
+    runs-on: ubuntu-latest
+    needs: test  # Wait for tests to pass
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.9"
+
+      - name: Build binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snippy-api .
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snippy-api-binary
+          path: snippy-api
+          retention-days: 1
+
+  # Step 3: Deploy to server (only if build succeeds)
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build  # Wait for build to complete
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
         with:
-          go-version: "1.24.9"
-
-      - name: Build
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snippy-api .
+          name: snippy-api-binary
 
       - name: Stop services before update
         uses: appleboy/ssh-action@v1.0.3
@@ -71,27 +152,27 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
             cd /root/snippy-api
-            
+
             # Make binary executable
             chmod +x snippy-api
-            
+
             # Install systemd service if it doesn't exist
             if [ ! -f /etc/systemd/system/snippy-api.service ]; then
               cp snippy-api.service /etc/systemd/system/
               systemctl daemon-reload
               systemctl enable snippy-api
             fi
-            
+
             # Restart service (this runs docker-compose)
             systemctl restart snippy-api
-            
+
             # Wait for services to start
             sleep 10
-            
+
             # Check status
             systemctl status snippy-api --no-pager
             docker-compose ps
-            
+
             # Health check
             if curl -f http://localhost:8080/api/v1/health; then
               echo "✅ Deploy successful"
