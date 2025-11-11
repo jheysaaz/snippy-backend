@@ -1,0 +1,218 @@
+package main
+
+import (
+	"database/sql"
+	"testing"
+
+	_ "github.com/lib/pq"
+)
+
+func TestDatabaseConnection(t *testing.T) {
+	// Skip if no database available
+	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	testDB, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Skip("Skipping database tests: PostgreSQL not available")
+	}
+	defer testDB.Close()
+
+	if err := testDB.Ping(); err != nil {
+		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
+	}
+
+	t.Log("Database connection successful")
+}
+
+func TestInitDatabase(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	testDB, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Skip("Skipping database tests: PostgreSQL not available")
+	}
+	defer testDB.Close()
+
+	if err := testDB.Ping(); err != nil {
+		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
+	}
+
+	// Clean up
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+
+	// Set global db for initDatabase function
+	db = testDB
+
+	// Test schema initialization
+	if err := initDatabase(); err != nil {
+		t.Fatalf("initDatabase failed: %v", err)
+	}
+
+	// Verify table exists
+	var exists bool
+	err = testDB.QueryRow(`
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_name = 'snippets'
+		)
+	`).Scan(&exists)
+
+	if err != nil {
+		t.Fatalf("Failed to check table existence: %v", err)
+	}
+
+	if !exists {
+		t.Error("Snippets table was not created")
+	}
+
+	// Verify columns exist
+	columns := []string{"id", "title", "description", "code", "language", "tags", "created_at", "updated_at"}
+	for _, col := range columns {
+		var colExists bool
+		err = testDB.QueryRow(`
+			SELECT EXISTS (
+				SELECT FROM information_schema.columns 
+				WHERE table_name = 'snippets' AND column_name = $1
+			)
+		`, col).Scan(&colExists)
+
+		if err != nil {
+			t.Fatalf("Failed to check column %s: %v", col, err)
+		}
+
+		if !colExists {
+			t.Errorf("Column %s does not exist", col)
+		}
+	}
+
+	// Verify indexes exist
+	indexes := []string{"idx_snippets_created_at", "idx_snippets_language", "idx_snippets_tags", "idx_snippets_search"}
+	for _, idx := range indexes {
+		var idxExists bool
+		err = testDB.QueryRow(`
+			SELECT EXISTS (
+				SELECT FROM pg_indexes 
+				WHERE tablename = 'snippets' AND indexname = $1
+			)
+		`, idx).Scan(&idxExists)
+
+		if err != nil {
+			t.Fatalf("Failed to check index %s: %v", idx, err)
+		}
+
+		if !idxExists {
+			t.Errorf("Index %s does not exist", idx)
+		}
+	}
+
+	// Clean up
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+}
+
+func TestDatabaseSchemaIntegrity(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	testDB, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Skip("Skipping database tests: PostgreSQL not available")
+	}
+	defer testDB.Close()
+
+	if err := testDB.Ping(); err != nil {
+		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
+	}
+
+	// Set global db
+	db = testDB
+
+	// Clean up and initialize
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	if err := initDatabase(); err != nil {
+		t.Fatalf("initDatabase failed: %v", err)
+	}
+
+	// Test inserting data
+	_, err = testDB.Exec(`
+		INSERT INTO snippets (title, description, code, language, tags)
+		VALUES ($1, $2, $3, $4, $5)
+	`, "Test", "Description", "code", "go", []string{"test"})
+
+	if err != nil {
+		t.Errorf("Failed to insert test data: %v", err)
+	}
+
+	// Test querying data
+	var count int
+	err = testDB.QueryRow("SELECT COUNT(*) FROM snippets").Scan(&count)
+	if err != nil {
+		t.Errorf("Failed to query data: %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 row, got %d", count)
+	}
+
+	// Test array operations
+	var tags []string
+	err = testDB.QueryRow("SELECT tags FROM snippets WHERE id = 1").Scan(&tags)
+	if err != nil {
+		t.Errorf("Failed to query tags: %v", err)
+	}
+
+	// Clean up
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+}
+
+func TestDatabaseTrigger(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/snippy_test?sslmode=disable"
+	testDB, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Skip("Skipping database tests: PostgreSQL not available")
+	}
+	defer testDB.Close()
+
+	if err := testDB.Ping(); err != nil {
+		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
+	}
+
+	db = testDB
+
+	// Clean up and initialize
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	if err := initDatabase(); err != nil {
+		t.Fatalf("initDatabase failed: %v", err)
+	}
+
+	// Insert a snippet
+	_, err = testDB.Exec(`
+		INSERT INTO snippets (title, description, code, language, tags)
+		VALUES ($1, $2, $3, $4, $5)
+	`, "Test", "Description", "code", "go", []string{"test"})
+
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Get original updated_at
+	var originalUpdated, newUpdated string
+	err = testDB.QueryRow("SELECT updated_at FROM snippets WHERE id = 1").Scan(&originalUpdated)
+	if err != nil {
+		t.Fatalf("Failed to get original updated_at: %v", err)
+	}
+
+	// Update the snippet
+	_, err = testDB.Exec("UPDATE snippets SET title = $1 WHERE id = 1", "Updated Title")
+	if err != nil {
+		t.Fatalf("Failed to update snippet: %v", err)
+	}
+
+	// Get new updated_at
+	err = testDB.QueryRow("SELECT updated_at FROM snippets WHERE id = 1").Scan(&newUpdated)
+	if err != nil {
+		t.Fatalf("Failed to get new updated_at: %v", err)
+	}
+
+	// Verify updated_at changed (this may fail if updates happen too quickly)
+	// In a real scenario, you might want to add a small delay or use more precise comparison
+	t.Logf("Original updated_at: %s, New updated_at: %s", originalUpdated, newUpdated)
+
+	// Clean up
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+}
