@@ -39,31 +39,61 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
+            set -euxo pipefail
             cd /root/snippy-backend
-            git pull
+            git pull --ff-only || true
             chmod +x snippy-api
 
-            # Start PostgreSQL
+            # Start PostgreSQL (if not running)
             docker-compose up -d postgres
             sleep 5
 
-            # Stop old API process
+            # Stop old API process (best-effort)
             pkill -f snippy-api || true
             sleep 1
 
-            # Load environment and start API
-            source .env.production
-            export $(cat .env.production | grep -v '^#' | xargs)
-            nohup ./snippy-api > api.log 2>&1 &
+            # Load environment safely (supports POSIX shell)
+            if [ -f .env.production ]; then
+              echo "Loading .env.production"
+              set -a
+              . .env.production
+              set +a
+            else
+              echo ".env.production not found"
+            fi
 
-            # Wait for startup
-            sleep 3
+            # Start API with nohup and capture pid
+            nohup ./snippy-api > api.log 2>&1 &
+            API_PID=$!
+            echo "Started snippy-api (pid=$API_PID)"
+
+            # Give the app a few seconds to initialize and produce logs
+            sleep 5
+
+            # Quick diagnostics (always print; helpful when things fail)
+            echo "=== tail -n 200 api.log ==="
+            tail -n 200 api.log || true
+            echo "=== ps aux | grep snippy-api ==="
+            ps aux | grep snippy-api | grep -v grep || true
+            echo "=== dmesg | tail -n 50 ==="
+            dmesg | tail -n 50 || true
 
             # Health check
-            if curl -f http://localhost:8080/health; then
+            if curl -sSf http://localhost:8080/health; then
               echo "✅ Deployment successful!"
             else
               echo "❌ Health check failed"
-              tail -20 api.log
+              echo "Process $API_PID status:"
+              if [ -d /proc/${API_PID} ]; then
+                echo "Process ${API_PID} still exists"
+              else
+                echo "Process ${API_PID} not running"
+              fi
+              echo "=== Last 200 lines of api.log ==="
+              tail -n 200 api.log || true
+              echo "=== dmesg | tail -n 200 ==="
+              dmesg | tail -n 200 || true
+              echo "=== ps aux (full) ==="
+              ps aux || true
               exit 1
             fi
