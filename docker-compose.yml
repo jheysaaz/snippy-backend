@@ -46,6 +46,10 @@ services:
   # Snippy API
   api:
     image: ghcr.io/jheysaaz/snippy-backend:latest
+    # Fallback to local build if image is not available
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: snippy-api
     restart: unless-stopped
     env_file:

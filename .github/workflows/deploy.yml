@@ -23,6 +23,7 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           port: ${{ secrets.DROPLET_PORT || 22 }}
+          command_timeout: 30m
           script: |
             # Navigate to project directory
             cd /root/snippy-backend || { echo "Project directory not found"; exit 1; }
@@ -31,17 +32,53 @@ jobs:
             echo "📥 Pulling latest changes from GitHub..."
             git pull origin main
 
-            # Log in to GitHub Container Registry
-            echo "🔐 Logging in to GitHub Container Registry..."
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Test connectivity to GHCR
+            echo "🔍 Testing connectivity to ghcr.io..."
+            CAN_REACH_GHCR=false
+            if curl -s --connect-timeout 10 https://ghcr.io > /dev/null 2>&1; then
+              CAN_REACH_GHCR=true
+              echo "✅ Can reach ghcr.io"
+            else
+              echo "⚠️  Cannot reach ghcr.io - will build locally instead"
+            fi
 
-            # Pull the latest image
-            echo "📦 Pulling latest Docker image..."
-            docker pull ghcr.io/${{ github.repository }}:latest
+            # Try to use pre-built image if GHCR is reachable
+            if [ "$CAN_REACH_GHCR" = true ]; then
+              echo "🔐 Logging in to GitHub Container Registry..."
+              if echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null; then
+                echo "📦 Pulling latest Docker image from GHCR..."
+                if docker pull ghcr.io/${{ github.repository }}:latest 2>/dev/null; then
+                  echo "✅ Successfully pulled image from GHCR"
+                  USE_PREBUILT=true
+                else
+                  echo "⚠️  Pull failed, will build locally"
+                  USE_PREBUILT=false
+                fi
+              else
+                echo "⚠️  Login failed, will build locally"
+                USE_PREBUILT=false
+              fi
+            else
+              USE_PREBUILT=false
+            fi
 
-            # Run deployment script (will use pre-built image)
+            # Build locally if couldn't pull from GHCR
+            if [ "$USE_PREBUILT" != true ]; then
+              echo "🔨 Building Docker image locally..."
+              export DOCKER_BUILDKIT=1
+              export COMPOSE_DOCKER_CLI_BUILD=1
+              docker-compose build --no-cache
+            fi
+
+            # Run deployment script
             echo "🚀 Running deployment script..."
             chmod +x deploy.sh
+            
+            # Modify deploy.sh to skip pull if we're building locally
+            if [ "$USE_PREBUILT" != true ]; then
+              export SKIP_PULL=true
+            fi
+            
             ./deploy.sh production
 
             # Show container status

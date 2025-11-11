@@ -42,9 +42,16 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
-echo "📦 Pulling latest Docker images..."
-# No need to build - images are pre-built in GitHub Actions
-docker-compose -f $COMPOSE_FILE pull
+# Pull or skip based on SKIP_PULL environment variable
+if [ "$SKIP_PULL" = "true" ]; then
+    echo "⏭️  Skipping image pull (using locally built image)..."
+else
+    echo "📦 Pulling latest Docker images..."
+    # Try to pull, but don't fail if it doesn't work
+    if ! docker-compose -f $COMPOSE_FILE pull 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Could not pull images, will use local build${NC}"
+    fi
+fi
 
 echo "🔄 Stopping existing containers..."
 docker-compose -f $COMPOSE_FILE -f $PROD_FILE down
