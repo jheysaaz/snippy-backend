@@ -134,17 +134,48 @@ cat ~/.ssh/github_actions_deploy
 
 ### 4. Create .env.production on Server
 
+⚠️ **Important**: Never commit `.env.production` to your repository!
+
 SSH to your droplet and create the production environment file:
 
 ```bash
 ssh root@YOUR_DROPLET_IP
-cd /root/snippy-backend
+cd /root/snippy-api
 
-# Create .env.production with your configuration
+# Create .env.production with your production configuration
 nano .env.production
 ```
 
-This file should contain all required environment variables for the API.
+Example `.env.production` content:
+
+```bash
+# PostgreSQL Configuration
+POSTGRES_USER=your_production_user
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=snippy_production
+
+# Database URL for application
+DATABASE_URL=postgres://your_production_user:your_secure_password@postgres:5432/snippy_production?sslmode=disable
+
+# Server Configuration
+PORT=8080
+GIN_MODE=release
+
+# JWT Configuration - Generate with: openssl rand -base64 64
+JWT_SECRET=your_production_jwt_secret_here
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Logging
+LOG_LEVEL=info
+```
+
+**Security tips**:
+- Use strong, unique passwords
+- Never use the same credentials as development
+- Generate a secure JWT_SECRET: `openssl rand -base64 64`
+- Restrict CORS to your actual domain
 
 ### 5. Test SSH Connection
 
