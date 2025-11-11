@@ -91,7 +91,7 @@ func CheckPassword(password, encodedHash string) bool {
 	}
 
 	// Hash the input password with the same parameters
-	inputHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(decodedHash)))
+	inputHash := argon2.IDKey([]byte(password), salt, time, memory, threads, argon2KeyLen)
 
 	// Use constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare(inputHash, decodedHash) == 1
