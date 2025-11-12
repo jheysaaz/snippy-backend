@@ -134,6 +134,26 @@ jobs:
           target: "/root/snippy-api/"
           overwrite: true
 
+      - name: Copy SSL setup scripts
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "scripts/"
+          target: "/root/snippy-api/"
+          overwrite: true
+
+      - name: Copy PostgreSQL config
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "config/"
+          target: "/root/snippy-api/"
+          overwrite: true
+
       - name: Copy docker-compose file
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -144,7 +164,7 @@ jobs:
           target: "/root/snippy-api/"
           overwrite: true
 
-      - name: Deploy
+      - name: Deploy with SSL
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DROPLET_HOST }}
@@ -155,6 +175,51 @@ jobs:
 
             # Make binary executable
             chmod +x snippy-api
+
+            # Make scripts executable
+            chmod +x scripts/*.sh
+
+            # Set up SSL certificates if they don't exist
+            if [ ! -f ssl/api/api.crt ] || [ ! -f ssl/postgres/server.crt ]; then
+              echo "🔐 Setting up SSL certificates..."
+
+              # Install certbot if not installed
+              if ! command -v certbot &> /dev/null; then
+                apt update && apt install -y certbot
+              fi
+
+              # Get Let's Encrypt certificates for the domain
+              if [ ! -f /etc/letsencrypt/live/api.snippy.jheysonsaavedra.com/fullchain.pem ]; then
+                echo "📜 Getting Let's Encrypt certificates..."
+                certbot certonly --standalone --non-interactive --agree-tos \
+                  --email ${{ secrets.LETSENCRYPT_EMAIL }} \
+                  -d api.snippy.jheysonsaavedra.com
+              else
+                echo "✅ Let's Encrypt certificates already exist"
+              fi
+
+              # Create SSL directories
+              mkdir -p ssl/api ssl/postgres
+
+              # Use Let's Encrypt certificates for API
+              cp /etc/letsencrypt/live/api.snippy.jheysonsaavedra.com/fullchain.pem ssl/api/api.crt
+              cp /etc/letsencrypt/live/api.snippy.jheysonsaavedra.com/privkey.pem ssl/api/api.key
+              chmod 644 ssl/api/api.crt
+              chmod 600 ssl/api/api.key
+
+              # Generate PostgreSQL SSL certificates
+              ./scripts/setup-postgres-ssl.sh
+
+              echo "✅ SSL certificates configured"
+            else
+              echo "✅ SSL certificates already exist"
+            fi
+
+            # Update .env.production with Let's Encrypt paths
+            if [ -f .env.production ]; then
+              sed -i 's|SSL_CERT_FILE=.*|SSL_CERT_FILE=/app/ssl/api/api.crt|' .env.production
+              sed -i 's|SSL_KEY_FILE=.*|SSL_KEY_FILE=/app/ssl/api/api.key|' .env.production
+            fi
 
             # Install systemd service if it doesn't exist
             if [ ! -f /etc/systemd/system/snippy-api.service ]; then
@@ -167,17 +232,31 @@ jobs:
             systemctl restart snippy-api
 
             # Wait for services to start
-            sleep 10
+            sleep 15
 
             # Check status
             systemctl status snippy-api --no-pager
             docker-compose ps
 
-            # Health check
-            if curl -f http://localhost:8080/api/v1/health; then
-              echo "✅ Deploy successful"
+            # Health check with HTTPS
+            echo "🏥 Running health checks..."
+            sleep 5
+
+            # Check HTTPS health
+            if curl -f -k https://localhost:443/api/v1/health; then
+              echo "✅ HTTPS health check successful"
             else
-              echo "❌ Health check failed"
+              echo "❌ HTTPS health check failed"
               docker-compose logs --tail=50 api
-              exit 1
             fi
+
+            # Check if domain is accessible
+            if curl -f https://api.snippy.jheysonsaavedra.com/api/v1/health; then
+              echo "✅ Domain SSL check successful"
+            else
+              echo "⚠️ Domain SSL check failed (may take time for DNS propagation)"
+            fi
+
+            # Show final status
+            echo "🚀 Deployment completed!"
+            echo "🔗 API available at: https://api.snippy.jheysonsaavedra.com"

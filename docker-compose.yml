@@ -5,10 +5,25 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
+    environment:
+      # Enable SSL
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # SSL certificates
+      - ./ssl/postgres/server.crt:/var/lib/postgresql/server.crt:ro
+      - ./ssl/postgres/server.key:/var/lib/postgresql/server.key:ro
+      # PostgreSQL SSL configuration
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key
+      -c ssl_min_protocol_version=TLSv1.2
+      -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U snippy_user"]
       interval: 10s
@@ -23,15 +38,21 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "443:443"
+      - "80:80"  # Optional: for HTTP redirect
     volumes:
       - .:/app:ro
+      # SSL certificates for API
+      - ./ssl/api/api.crt:/app/ssl/api/api.crt:ro
+      - ./ssl/api/api.key:/app/ssl/api/api.key:ro
+      # SSL certificates for PostgreSQL client
+      - ./ssl/postgres/root.crt:/app/ssl/postgres/root.crt:ro
     working_dir: /app
     env_file:
       - .env.production
     command: ./snippy-api
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "--no-check-certificate", "https://localhost:443/api/v1/health"]
       interval: 30s
       timeout: 3s
       start_period: 10s

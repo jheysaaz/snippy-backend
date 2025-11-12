@@ -129,10 +129,29 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Printf("Failed to start server: %v", err)
-		return
+	// Check if SSL/TLS certificates are available
+	sslCert := os.Getenv("SSL_CERT_FILE")
+	sslKey := os.Getenv("SSL_KEY_FILE")
+
+	if sslCert != "" && sslKey != "" {
+		// Run with HTTPS
+		log.Printf("Server starting with HTTPS on port %s", port)
+		log.Printf("Using SSL cert: %s", sslCert)
+		log.Printf("Using SSL key: %s", sslKey)
+
+		if err := router.RunTLS(":"+port, sslCert, sslKey); err != nil {
+			log.Printf("Failed to start HTTPS server: %v", err)
+			return
+		}
+	} else {
+		// Run with HTTP
+		log.Printf("Server starting with HTTP on port %s", port)
+		log.Println("To enable HTTPS, set SSL_CERT_FILE and SSL_KEY_FILE environment variables")
+
+		if err := router.Run(":" + port); err != nil {
+			log.Printf("Failed to start HTTP server: %v", err)
+			return
+		}
 	}
 }
 

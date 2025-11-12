@@ -1,0 +1,77 @@
+name: SSL Certificate Renewal
+
+on:
+  # Run weekly on Sundays at 3 AM UTC
+  schedule:
+    - cron: "0 3 * * 0"
+
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  renew-ssl:
+    name: Renew SSL Certificates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Renew SSL certificates on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd /root/snippy-api
+
+            # Set environment for renewal script
+            export LETSENCRYPT_EMAIL="${{ secrets.LETSENCRYPT_EMAIL }}"
+
+            # Run renewal script
+            if [ -f scripts/renew-ssl.sh ]; then
+              chmod +x scripts/renew-ssl.sh
+              ./scripts/renew-ssl.sh
+            else
+              echo "❌ Renewal script not found"
+              exit 1
+            fi
+
+      - name: Verify SSL after renewal
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            # Check certificate validity
+            echo "🔍 Checking certificate validity..."
+
+            if openssl s_client -connect api.snippy.jheysonsaavedra.com:443 -servername api.snippy.jheysonsaavedra.com < /dev/null 2>/dev/null | openssl x509 -noout -dates; then
+              echo "✅ Certificate is valid"
+            else
+              echo "❌ Certificate validation failed"
+              exit 1
+            fi
+
+            # Check API health
+            if curl -f https://api.snippy.jheysonsaavedra.com/api/v1/health; then
+              echo "✅ API health check passed"
+            else
+              echo "❌ API health check failed"
+              exit 1
+            fi
+
+      - name: Notify on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            echo "$(date): SSL renewal failed via GitHub Actions" >> /var/log/ssl-renewal.log
+
+            # Could add notification here (email, Slack, etc.)
+            # For example:
+            # curl -X POST -H 'Content-type: application/json' \
+            #   --data '{"text":"SSL renewal failed for api.snippy.jheysonsaavedra.com"}' \
+            #   ${{ secrets.SLACK_WEBHOOK_URL }}
