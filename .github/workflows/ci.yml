@@ -135,7 +135,7 @@ jobs:
         run: go build -v -o snippy-api .
 
       - name: Upload Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: snippy-api
           path: snippy-api

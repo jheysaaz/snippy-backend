@@ -86,7 +86,7 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o http-redirect ./cmd/redirect
 
       - name: Upload binaries artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: snippy-binaries
           path: |
