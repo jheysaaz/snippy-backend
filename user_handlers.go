@@ -296,7 +296,7 @@ func getUserSnippets(c *gin.Context) {
 	id := c.Param("id")
 
 	query := `
-		SELECT id, title, description, category, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE user_id = $1
 		ORDER BY created_at DESC
