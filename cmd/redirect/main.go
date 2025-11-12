@@ -1,10 +1,11 @@
-package redirect
+package main
 
 import (
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 // Simple HTTP to HTTPS redirect server
@@ -34,10 +35,19 @@ func main() {
 	// Setup HTTP server that redirects to HTTPS
 	http.HandleFunc("/", redirectToHTTPS)
 
+	// Create server with proper timeouts for security
+	server := &http.Server{
+		Addr:         ":" + httpPort,
+		Handler:      nil, // Use default ServeMux
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
+	}
+
 	log.Printf("HTTP to HTTPS redirect server starting on port %s", httpPort)
 	log.Printf("All HTTP requests will be redirected to HTTPS")
 
-	if err := http.ListenAndServe(":"+httpPort, nil); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal("Failed to start HTTP redirect server:", err)
 	}
 }

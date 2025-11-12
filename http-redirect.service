@@ -1,0 +1,22 @@
+[Unit]
+Description=HTTP to HTTPS Redirect Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/snippy-api
+ExecStart=/root/snippy-api/http-redirect
+Restart=on-failure
+RestartSec=5s
+Environment=HTTP_PORT=80
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/root/snippy-api
+
+[Install]
+WantedBy=multi-user.target

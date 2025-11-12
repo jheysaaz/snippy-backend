@@ -38,8 +38,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "443:443"
-      - "80:80"  # Optional: for HTTP redirect
+      - "443:443"  # HTTPS only - HTTP handled by separate redirect server
     volumes:
       - .:/app:ro
       # SSL certificates for API

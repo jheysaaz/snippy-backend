@@ -79,14 +79,19 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Build binary
+      - name: Build main API binary
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snippy-api .
 
-      - name: Upload binary artifact
+      - name: Build HTTP redirect binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o http-redirect ./cmd/redirect
+
+      - name: Upload binaries artifact
         uses: actions/upload-artifact@v4
         with:
-          name: snippy-api-binary
-          path: snippy-api
+          name: snippy-binaries
+          path: |
+            snippy-api
+            http-redirect
           retention-days: 1
 
   # Step 3: Deploy to server (only if build succeeds)
@@ -99,10 +104,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download binary artifact
+      - name: Download binaries artifact
         uses: actions/download-artifact@v4
         with:
-          name: snippy-api-binary
+          name: snippy-binaries
 
       - name: Stop services before update
         uses: appleboy/ssh-action@v1.0.3
@@ -114,7 +119,7 @@ jobs:
             cd /root/snippy-api 2>/dev/null || exit 0
             docker-compose down 2>/dev/null || true
 
-      - name: Copy binary to server
+      - name: Copy main API binary to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DROPLET_HOST }}
@@ -124,13 +129,23 @@ jobs:
           target: "/root/snippy-api/"
           overwrite: true
 
-      - name: Copy systemd service file
+      - name: Copy HTTP redirect binary to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "snippy-api.service"
+          source: "http-redirect"
+          target: "/root/snippy-api/"
+          overwrite: true
+
+      - name: Copy systemd service files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "snippy-api.service,http-redirect.service"
           target: "/root/snippy-api/"
           overwrite: true
 
@@ -173,8 +188,8 @@ jobs:
           script: |
             cd /root/snippy-api
 
-            # Make binary executable
-            chmod +x snippy-api
+            # Make binaries executable
+            chmod +x snippy-api http-redirect
 
             # Make scripts executable
             chmod +x scripts/*.sh
@@ -221,26 +236,42 @@ jobs:
               sed -i 's|SSL_KEY_FILE=.*|SSL_KEY_FILE=/app/ssl/api/api.key|' .env.production
             fi
 
-            # Install systemd service if it doesn't exist
+            # Install systemd services if they don't exist
             if [ ! -f /etc/systemd/system/snippy-api.service ]; then
               cp snippy-api.service /etc/systemd/system/
               systemctl daemon-reload
               systemctl enable snippy-api
             fi
 
-            # Restart service (this runs docker-compose)
+            if [ ! -f /etc/systemd/system/http-redirect.service ]; then
+              cp http-redirect.service /etc/systemd/system/
+              systemctl daemon-reload
+              systemctl enable http-redirect
+            fi
+
+            # Restart services
             systemctl restart snippy-api
+            systemctl restart http-redirect
 
             # Wait for services to start
             sleep 15
 
-            # Check status
+            # Check status of both services
+            echo "📊 Checking service status..."
             systemctl status snippy-api --no-pager
+            systemctl status http-redirect --no-pager
             docker-compose ps
 
             # Health check with HTTPS
             echo "🏥 Running health checks..."
             sleep 5
+
+            # Check HTTP redirect (should redirect to HTTPS)
+            if curl -I http://localhost:80/api/v1/health 2>/dev/null | grep -q "301\|302"; then
+              echo "✅ HTTP redirect working"
+            else
+              echo "⚠️ HTTP redirect not working (may be expected if port 80 is occupied)"
+            fi
 
             # Check HTTPS health
             if curl -f -k https://localhost:443/api/v1/health; then
