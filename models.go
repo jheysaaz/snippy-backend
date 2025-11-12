@@ -91,7 +91,7 @@ type CreateUserRequest struct {
 
 // LoginRequest for user login
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Login    string `json:"login" binding:"required"` // Can be username or email
 	Password string `json:"password" binding:"required"`
 }
 

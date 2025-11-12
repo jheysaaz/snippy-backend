@@ -327,7 +327,7 @@ func getUserSnippets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"snippets": snippets, "count": len(snippets)})
 }
 
-// login handles user login with email and password
+// login handles user login with username or email and password
 func login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -335,16 +335,17 @@ func login(c *gin.Context) {
 		return
 	}
 
+	// Query for user by username OR email
 	query := `
 		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
 		FROM users
-		WHERE email = $1
+		WHERE username = $1 OR email = $1
 	`
 
-	row := db.QueryRow(query, req.Email)
+	row := db.QueryRow(query, req.Login)
 	user, err := scanUser(row)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username/email or password"})
 		return
 	}
 	if err != nil {
@@ -354,7 +355,7 @@ func login(c *gin.Context) {
 
 	// Check password
 	if !CheckPassword(req.Password, user.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username/email or password"})
 		return
 	}
 
