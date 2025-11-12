@@ -75,7 +75,7 @@ func TestInitDatabase(t *testing.T) {
 	}
 
 	// Verify columns exist (NEW schema)
-	columns := []string{"id", "title", "description", "category", "shortcut", "content", "tags", "user_id", "created_at", "updated_at"}
+	columns := []string{"id", "label", "shortcut", "content", "tags", "user_id", "created_at", "updated_at"}
 	for _, col := range columns {
 		var colExists bool
 		err = testDB.QueryRow(`
@@ -95,7 +95,7 @@ func TestInitDatabase(t *testing.T) {
 	}
 
 	// Verify indexes exist (NEW schema)
-	indexes := []string{"idx_snippets_created_at", "idx_snippets_category", "idx_snippets_shortcut", "idx_snippets_tags", "idx_snippets_search"}
+	indexes := []string{"idx_snippets_created_at", "idx_snippets_shortcut", "idx_snippets_tags", "idx_snippets_search"}
 	for _, idx := range indexes {
 		var idxExists bool
 		err = testDB.QueryRow(`
@@ -156,9 +156,9 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 
 	// Test inserting data (NEW schema) with valid user_id
 	_, err = testDB.Exec(`
-		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}), testUserID)
+		INSERT INTO snippets (label, shortcut, content, tags, user_id)
+		VALUES ($1, $2, $3, $4, $5)
+	`, "Test", "go-test", "code", pq.Array([]string{"test"}), testUserID)
 
 	if err != nil {
 		t.Errorf("Failed to insert test data: %v", err)
@@ -223,9 +223,9 @@ func TestDatabaseTrigger(t *testing.T) {
 
 	// Insert a snippet (NEW schema) with valid user_id
 	_, err = testDB.Exec(`
-		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, "Test", "Description", "go", "go-test", "code", pq.Array([]string{"test"}), testUserID)
+		INSERT INTO snippets (label, shortcut, content, tags, user_id)
+		VALUES ($1, $2, $3, $4, $5)
+	`, "Test", "go-test", "code", pq.Array([]string{"test"}), testUserID)
 
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
@@ -239,7 +239,7 @@ func TestDatabaseTrigger(t *testing.T) {
 	}
 
 	// Update the snippet
-	_, err = testDB.Exec("UPDATE snippets SET title = $1 WHERE id = 1", "Updated Title")
+	_, err = testDB.Exec("UPDATE snippets SET label = $1 WHERE id = 1", "Updated Label")
 	if err != nil {
 		t.Fatalf("Failed to update snippet: %v", err)
 	}

@@ -13,25 +13,18 @@ import (
 // getSnippets retrieves all snippets with optional filtering
 func getSnippets(c *gin.Context) {
 	// Optional query parameters for filtering
-	category := c.Query("category")
 	tag := c.Query("tag")
 	search := c.Query("search")
 	limitStr := c.Query("limit")
 
 	// Build query with optional filters
 	query := `
-		SELECT id, title, description, category, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE 1=1
 	`
 	args := []interface{}{}
 	argPos := 1
-
-	if category != "" {
-		query += " AND category = $" + strconv.Itoa(argPos)
-		args = append(args, category)
-		argPos++
-	}
 
 	if tag != "" {
 		query += " AND $" + strconv.Itoa(argPos) + " = ANY(tags)"
@@ -41,7 +34,7 @@ func getSnippets(c *gin.Context) {
 
 	if search != "" {
 		// Use full-text search index for better performance
-		query += " AND to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english', $" + strconv.Itoa(argPos) + ")"
+		query += " AND to_tsvector('english', coalesce(label, '')) @@ plainto_tsquery('english', $" + strconv.Itoa(argPos) + ")"
 		args = append(args, search)
 		argPos++
 	}
@@ -95,7 +88,7 @@ func getSnippet(c *gin.Context) {
 	}
 
 	query := `
-		SELECT id, title, description, category, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE id = $1
 	`
@@ -135,16 +128,14 @@ func createSnippet(c *gin.Context) {
 	}
 
 	query := `
-		INSERT INTO snippets (title, description, category, shortcut, content, tags, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, title, description, category, shortcut, content, tags, user_id, created_at, updated_at
+		INSERT INTO snippets (label, shortcut, content, tags, user_id)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
 	row := db.QueryRow(
 		query,
-		req.Title,
-		req.Description,
-		req.Category,
+		req.Label,
 		req.Shortcut,
 		req.Content,
 		pq.Array(req.Tags),
@@ -166,19 +157,9 @@ func buildSnippetUpdateQuery(req *UpdateSnippetRequest) ([]string, []interface{}
 	args := []interface{}{}
 	argPos := 1
 
-	if req.Title != nil {
-		updates = append(updates, "title = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Title)
-		argPos++
-	}
-	if req.Description != nil {
-		updates = append(updates, "description = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Description)
-		argPos++
-	}
-	if req.Category != nil {
-		updates = append(updates, "category = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Category)
+	if req.Label != nil {
+		updates = append(updates, "label = $"+strconv.Itoa(argPos))
+		args = append(args, *req.Label)
 		argPos++
 	}
 	if req.Shortcut != nil {
@@ -256,7 +237,7 @@ func updateSnippet(c *gin.Context) {
 		UPDATE snippets
 		SET ` + strings.Join(updates, ", ") + `
 		WHERE id = $` + strconv.Itoa(argPos) + `
-		RETURNING id, title, description, category, shortcut, content, tags, user_id, created_at, updated_at
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
 	row := db.QueryRow(query, args...)

@@ -50,9 +50,7 @@ func initDatabase() error {
 	-- Create snippets table
 	CREATE TABLE IF NOT EXISTS snippets (
 		id SERIAL PRIMARY KEY,
-		title VARCHAR(255) NOT NULL,
-		description TEXT,
-		category VARCHAR(100) NOT NULL,
+		label VARCHAR(255) NOT NULL,
 		shortcut VARCHAR(50) NOT NULL,
 		content TEXT NOT NULL,
 		tags TEXT[], -- PostgreSQL array for tags
@@ -67,18 +65,15 @@ func initDatabase() error {
 	-- Create index on created_at for sorting (performance optimization)
 	CREATE INDEX IF NOT EXISTS idx_snippets_created_at ON snippets(created_at DESC);
 
-	-- Create index on category for filtering
-	CREATE INDEX IF NOT EXISTS idx_snippets_category ON snippets(category);
-
 	-- Create index on shortcut for fast lookups
 	CREATE INDEX IF NOT EXISTS idx_snippets_shortcut ON snippets(shortcut);
 
 	-- Create GIN index on tags array for fast array searches
 	CREATE INDEX IF NOT EXISTS idx_snippets_tags ON snippets USING GIN(tags);
 
-	-- Create full-text search index on title and description
+	-- Create full-text search index on label
 	CREATE INDEX IF NOT EXISTS idx_snippets_search ON snippets USING GIN(
-		to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))
+		to_tsvector('english', coalesce(label, ''))
 	);
 
 	-- Create trigger to automatically update updated_at
