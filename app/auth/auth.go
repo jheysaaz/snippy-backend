@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"crypto/rand"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jheysaaz/snippy-backend/app/models"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -155,13 +156,13 @@ type Claims struct {
 
 // GenerateToken generates a new JWT token for a user (DEPRECATED - use GenerateAccessToken)
 // Kept for backward compatibility
-func GenerateToken(user *User) (string, error) {
+func GenerateToken(user *models.User) (string, error) {
 	return GenerateAccessToken(user)
 }
 
 // GenerateAccessToken generates a short-lived JWT access token for a user
-func GenerateAccessToken(user *User) (string, error) {
-	expirationTime := time.Now().Add(AccessTokenDuration) // 15 minutes
+func GenerateAccessToken(user *models.User) (string, error) {
+	expirationTime := time.Now().Add(models.AccessTokenDuration) // 15 minutes
 
 	claims := &Claims{
 		UserID:   user.ID,

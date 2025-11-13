@@ -111,7 +111,7 @@ http://localhost:8080/api/v1
 
 **Users:**
 
-- `POST /users` - Register new user
+- `POST /auth/register` - Register new user
 - `GET /users` - List all users
 - `GET /users/:id` - Get user details
 - `PUT /users/:id` - Update user
@@ -230,7 +230,7 @@ For detailed setup instructions, see [README.md](../README.md) or [DEVELOPMENT.m
 ### Create a User
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/users \
+curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "johndoe",

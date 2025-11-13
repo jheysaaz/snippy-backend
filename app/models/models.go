@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"database/sql"
@@ -38,7 +38,7 @@ type UpdateSnippetRequest struct {
 }
 
 // scanSnippet scans a database row into a Snippet struct
-func scanSnippet(scanner interface {
+func ScanSnippet(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*Snippet, error) {
 	var s Snippet
@@ -135,7 +135,7 @@ type UpdateUserRequest struct {
 }
 
 // scanUser scans a database row into a User struct
-func scanUser(scanner interface {
+func ScanUser(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*User, error) {
 	var user User

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jheysaaz/snippy-backend/app/models"
 	"github.com/lib/pq"
 )
 
@@ -57,7 +58,7 @@ func TestSnippetScanFunction(t *testing.T) {
 				updatedAt: tt.updatedAt,
 			}
 
-			snippet, err := scanSnippet(mockRow)
+			snippet, err := models.ScanSnippet(mockRow)
 			if err != nil {
 				t.Fatalf("scanSnippet failed: %v", err)
 			}
@@ -84,13 +85,13 @@ func TestSnippetScanFunction(t *testing.T) {
 func TestUpdateSnippetRequestValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		request UpdateSnippetRequest
+		request models.UpdateSnippetRequest
 		hasData bool
 	}{
 		{
 			name:    "All fields provided",
 			hasData: true,
-			request: UpdateSnippetRequest{
+			request: models.UpdateSnippetRequest{
 				Label:    stringPtr("New Label"),
 				Shortcut: stringPtr("new-shortcut"),
 				Content:  stringPtr("new content"),
@@ -100,14 +101,14 @@ func TestUpdateSnippetRequestValidation(t *testing.T) {
 		{
 			name:    "Only label provided",
 			hasData: true,
-			request: UpdateSnippetRequest{
+			request: models.UpdateSnippetRequest{
 				Label: stringPtr("Only Label"),
 			},
 		},
 		{
 			name:    "No fields provided",
 			hasData: false,
-			request: UpdateSnippetRequest{},
+			request: models.UpdateSnippetRequest{},
 		},
 	}
 

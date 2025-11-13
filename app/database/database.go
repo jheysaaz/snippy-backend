@@ -1,8 +1,51 @@
-package main
+package database
 
 import (
+	"database/sql"
 	"log"
+	"os"
+	"time"
+
+	_ "github.com/lib/pq"
 )
+
+// DB is the global database connection
+var DB *sql.DB
+
+// Init initializes the database connection and schema
+func Init() error {
+	// Get PostgreSQL connection string from environment variable
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/snippy?sslmode=disable"
+	}
+
+	// Connect to PostgreSQL
+	var err error
+	DB, err = sql.Open("postgres", dbURL)
+	if err != nil {
+		return err
+	}
+
+	// Configure connection pool for performance
+	DB.SetMaxOpenConns(25)
+	DB.SetMaxIdleConns(25)
+	DB.SetConnMaxLifetime(5 * time.Minute)
+	DB.SetConnMaxIdleTime(5 * time.Minute) // Close idle connections after 5 minutes
+
+	// Test database connection and wait for it to be ready
+	for {
+		if err := DB.Ping(); err != nil {
+			log.Printf("Failed to ping PostgreSQL: %v", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+
+	// Initialize database schema
+	return initDatabase()
+}
 
 // initDatabase creates tables and indexes if they don't exist
 func initDatabase() error {
@@ -98,7 +141,7 @@ func initDatabase() error {
 		EXECUTE FUNCTION update_updated_at_column();
 	`
 
-	_, err := db.Exec(schema)
+	_, err := DB.Exec(schema)
 	if err != nil {
 		return err
 	}

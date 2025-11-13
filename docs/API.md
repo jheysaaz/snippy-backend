@@ -190,7 +190,7 @@ curl -X POST http://localhost:8080/api/v1/auth/logout-all \
 
 Register a new user account.
 
-**Endpoint:** `POST /users`
+**Endpoint:** `POST /auth/register`
 
 **Request Body:**
 
@@ -228,7 +228,7 @@ Register a new user account.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/users \
+curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "johndoe",
@@ -241,39 +241,77 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 ### Get All Users
 
-Retrieve a list of all users.
+Retrieve a list of all users. **Requires authentication.**
 
 **Endpoint:** `GET /users`
 
-**Query Parameters:** None
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **Success Response (200 OK):**
 
 ```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
-    "email": "user@example.com",
-    "created_at": "2025-11-10T10:30:00Z",
-    "updated_at": "2025-11-10T10:30:00Z"
-  }
-]
+{
+  "users": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "username": "johndoe",
+      "email": "user@example.com",
+      "created_at": "2025-11-10T10:30:00Z",
+      "updated_at": "2025-11-10T10:30:00Z"
+    }
+  ],
+  "count": 1
+}
 ```
 
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/users
+curl http://localhost:8080/api/v1/users \
+  -H "Authorization: Bearer <access_token>"
+```
+
+---
+
+### Get Current User Profile
+
+Retrieve the authenticated user's profile. **Requires authentication.**
+
+**Endpoint:** `GET /users/profile`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
+**Success Response (200 OK):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "johndoe",
+  "email": "user@example.com",
+  "created_at": "2025-11-10T10:30:00Z",
+  "updated_at": "2025-11-10T10:30:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8080/api/v1/users/profile \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
 
 ### Get User by ID
 
-Retrieve a specific user by their UUID.
+Retrieve a specific user by their UUID. **Requires authentication.**
 
 **Endpoint:** `GET /users/:id`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **URL Parameters:**
 
@@ -298,50 +336,71 @@ Retrieve a specific user by their UUID.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000
+curl http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
 
-### Get User by Username
+### Update Current User Profile
 
-Retrieve a user by their username.
+Update the authenticated user's profile. **Requires authentication.**
 
-**Endpoint:** `GET /users/username/:username`
+**Endpoint:** `PUT /users/profile`
 
-**URL Parameters:**
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
-- `username` (string) - Username
+**Request Body:**
+
+```json
+{
+  "username": "newusername",
+  "email": "newemail@example.com",
+  "password": "newPassword123"
+}
+```
+
+**Note:** All fields are optional. Only provided fields will be updated.
 
 **Success Response (200 OK):**
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "username": "johndoe",
-  "email": "user@example.com",
+  "username": "newusername",
+  "email": "newemail@example.com",
   "created_at": "2025-11-10T10:30:00Z",
-  "updated_at": "2025-11-10T10:30:00Z"
+  "updated_at": "2025-11-10T11:00:00Z"
 }
 ```
 
 **Error Responses:**
 
-- `404 Not Found` - User not found
+- `400 Bad Request` - No valid fields provided or duplicate username/email
+- `500 Internal Server Error` - Server error
 
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/users/username/johndoe
+curl -X PUT http://localhost:8080/api/v1/users/profile \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newusername"
+  }'
 ```
 
 ---
 
-### Update User
+### Update User by ID
 
-Update user information.
+Update a user by their ID. **Requires authentication.**
 
 **Endpoint:** `PUT /users/:id`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **URL Parameters:**
 
@@ -381,6 +440,7 @@ Update user information.
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "newusername"
@@ -391,34 +451,12 @@ curl -X PUT http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440
 
 ### Delete User
 
-Delete a user account.
+Delete a user account. **Requires authentication.**
 
 **Endpoint:** `DELETE /users/:id`
 
-**URL Parameters:**
-
-- `id` (UUID) - User ID
-
-**Success Response (204 No Content)**
-
-**Error Responses:**
-
-- `404 Not Found` - User not found
-- `500 Internal Server Error` - Server error
-
-**Example:**
-
-```bash
-curl -X DELETE http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000
-```
-
----
-
-### Get User's Snippets
-
-Retrieve all snippets created by a specific user.
-
-**Endpoint:** `GET /users/:id/snippets`
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **URL Parameters:**
 
@@ -427,20 +465,9 @@ Retrieve all snippets created by a specific user.
 **Success Response (200 OK):**
 
 ```json
-[
-  {
-    "id": 1,
-    "title": "Git Status Shortcut",
-    "description": "Quick command to check git status",
-    "category": "git",
-    "shortcut": "gst",
-    "content": "git status -sb",
-    "tags": ["git", "shortcuts"],
-    "user_id": "550e8400-e29b-41d4-a716-446655440000",
-    "created_at": "2025-11-10T10:30:00Z",
-    "updated_at": "2025-11-10T10:30:00Z"
-  }
-]
+{
+  "message": "User deleted successfully"
+}
 ```
 
 **Error Responses:**
@@ -451,7 +478,8 @@ Retrieve all snippets created by a specific user.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000/snippets
+curl -X DELETE http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
@@ -460,42 +488,37 @@ curl http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000/sni
 
 ### Create Snippet
 
-Create a new code snippet.
+Create a new code snippet. **Requires authentication.** The snippet is automatically assigned to the authenticated user.
 
 **Endpoint:** `POST /snippets`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **Request Body:**
 
 ```json
 {
-  "title": "Git Status Shortcut",
-  "description": "Quick command to check git status",
-  "category": "git",
+  "label": "Git Status Shortcut",
   "shortcut": "gst",
   "content": "git status -sb",
-  "tags": ["git", "shortcuts"],
-  "userId": "550e8400-e29b-41d4-a716-446655440000"
+  "tags": ["git", "shortcuts"]
 }
 ```
 
 **Validation Rules:**
 
-- `title`: Required
-- `category`: Required
-- `shortcut`: Required, no spaces allowed
+- `label`: Required
+- `shortcut`: Optional, no spaces allowed
 - `content`: Required
-- `description`: Optional
 - `tags`: Optional array of strings
-- `userId`: Optional UUID
 
 **Success Response (201 Created):**
 
 ```json
 {
   "id": 1,
-  "title": "Git Status Shortcut",
-  "description": "Quick command to check git status",
-  "category": "git",
+  "label": "Git Status Shortcut",
   "shortcut": "gst",
   "content": "git status -sb",
   "tags": ["git", "shortcuts"],
@@ -508,68 +531,72 @@ Create a new code snippet.
 **Error Responses:**
 
 - `400 Bad Request` - Validation error
+- `401 Unauthorized` - Missing or invalid token
 - `500 Internal Server Error` - Server error
 
 **Example:**
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/snippets \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Git Status Shortcut",
-    "description": "Quick command to check git status",
-    "category": "git",
+    "label": "Git Status Shortcut",
     "shortcut": "gst",
     "content": "git status -sb",
-    "tags": ["git", "shortcuts"],
-    "userId": "550e8400-e29b-41d4-a716-446655440000"
+    "tags": ["git", "shortcuts"]
   }'
 ```
 
 ---
 
-### Get All Snippets
+### Get User Snippets
 
-Retrieve snippets with optional filtering.
+Retrieve all snippets for the authenticated user with optional filtering. **Requires authentication.**
 
 **Endpoint:** `GET /snippets`
 
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
 **Query Parameters:**
 
-- `category` (string) - Filter by category (e.g., "git", "docker", "kubernetes")
 - `tag` (string) - Filter by tag
-- `search` (string) - Full-text search in title and description
-- `limit` (integer) - Limit results (max 100, default: all)
+- `search` (string) - Full-text search in label and content
+- `limit` (integer) - Limit results (default: all)
 
 **Success Response (200 OK):**
 
 ```json
-[
-  {
-    "id": 1,
-    "title": "Git Status Shortcut",
-    "description": "Quick command to check git status",
-    "category": "git",
-    "shortcut": "gst",
-    "content": "git status -sb",
-    "tags": ["git", "shortcuts"],
-    "user_id": "550e8400-e29b-41d4-a716-446655440000",
-    "created_at": "2025-11-10T10:30:00Z",
-    "updated_at": "2025-11-10T10:30:00Z"
-  }
-]
+{
+  "snippets": [
+    {
+      "id": 1,
+      "label": "Git Status Shortcut",
+      "shortcut": "gst",
+      "content": "git status -sb",
+      "tags": ["git", "shortcuts"],
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "created_at": "2025-11-10T10:30:00Z",
+      "updated_at": "2025-11-10T10:30:00Z"
+    }
+  ],
+  "count": 1
+}
 ```
 
 **Examples:**
 
 ```bash
-# Get all snippets
-curl http://localhost:8080/api/v1/snippets
-
-# Filter by category
-curl http://localhost:8080/api/v1/snippets?category=git
+# Get all user snippets
+curl http://localhost:8080/api/v1/snippets \
+  -H "Authorization: Bearer <access_token>"
 
 # Filter by tag
+curl http://localhost:8080/api/v1/snippets?tag=git \
+  -H "Authorization: Bearer <access_token>"
+
+# Search snippets
 curl http://localhost:8080/api/v1/snippets?tag=shortcuts
 
 # Full-text search
@@ -587,6 +614,9 @@ Retrieve a specific snippet.
 
 **Endpoint:** `GET /snippets/:id`
 
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
 **URL Parameters:**
 
 - `id` (integer) - Snippet ID
@@ -596,9 +626,7 @@ Retrieve a specific snippet.
 ```json
 {
   "id": 1,
-  "title": "Git Status Shortcut",
-  "description": "Quick command to check git status",
-  "category": "git",
+  "label": "Git Status Shortcut",
   "shortcut": "gst",
   "content": "git status -sb",
   "tags": ["git", "shortcuts"],
@@ -610,21 +638,26 @@ Retrieve a specific snippet.
 
 **Error Responses:**
 
+- `401 Unauthorized` - Missing or invalid token
 - `404 Not Found` - Snippet not found
 
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/snippets/1
+curl http://localhost:8080/api/v1/snippets/1 \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
 
 ### Update Snippet
 
-Update an existing snippet.
+Update an existing snippet. **Requires authentication.** Only the owner can update their snippets.
 
 **Endpoint:** `PUT /snippets/:id`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **URL Parameters:**
 
@@ -634,9 +667,7 @@ Update an existing snippet.
 
 ```json
 {
-  "title": "Updated Git Status",
-  "description": "Enhanced git status command",
-  "category": "git",
+  "label": "Updated Git Status",
   "shortcut": "gst",
   "content": "git status -sb --show-stash",
   "tags": ["git", "shortcuts", "enhanced"]
@@ -650,9 +681,7 @@ Update an existing snippet.
 ```json
 {
   "id": 1,
-  "title": "Updated Git Status",
-  "description": "Enhanced git status command",
-  "category": "git",
+  "label": "Updated Git Status",
   "shortcut": "gst",
   "content": "git status -sb --show-stash",
   "tags": ["git", "shortcuts", "enhanced"],
@@ -665,6 +694,8 @@ Update an existing snippet.
 **Error Responses:**
 
 - `400 Bad Request` - No valid fields provided or validation error
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Not authorized to update this snippet
 - `404 Not Found` - Snippet not found
 - `500 Internal Server Error` - Server error
 
@@ -672,9 +703,10 @@ Update an existing snippet.
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/snippets/1 \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Updated Git Status",
+    "label": "Updated Git Status",
     "content": "git status -sb --show-stash"
   }'
 ```
@@ -683,24 +715,37 @@ curl -X PUT http://localhost:8080/api/v1/snippets/1 \
 
 ### Delete Snippet
 
-Delete a snippet.
+Delete a snippet. **Requires authentication.** Only the owner can delete their snippets.
 
 **Endpoint:** `DELETE /snippets/:id`
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
 
 **URL Parameters:**
 
 - `id` (integer) - Snippet ID
 
-**Success Response (204 No Content)**
+**Success Response (200 OK):**
+
+```json
+{
+  "message": "Snippet deleted successfully"
+}
+```
 
 **Error Responses:**
 
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Not authorized to delete this snippet
+- `404 Not Found` - Snippet not found
 - `500 Internal Server Error` - Server error
 
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/snippets/1
+curl -X DELETE http://localhost:8080/api/v1/snippets/1 \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---

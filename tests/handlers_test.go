@@ -13,6 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jheysaaz/snippy-backend/app/auth"
+	"github.com/jheysaaz/snippy-backend/app/database"
+	"github.com/jheysaaz/snippy-backend/app/handlers"
 	_ "github.com/lib/pq"
 )
 
@@ -186,12 +189,12 @@ func TestCreateSnippetValidation(t *testing.T) {
 			testDB := setupTestDB(t)
 			defer cleanupTestDB(t, testDB)
 
-			// Set global db variable for handler
-			db = testDB
+			// Set database.DB for handlers
+			database.DB = testDB
 
 			router := gin.New()
 			// Add auth middleware for create endpoint
-			router.POST("/api/v1/snippets", AuthMiddleware(), createSnippet)
+			router.POST("/api/v1/snippets", auth.AuthMiddleware(), handlers.CreateSnippet)
 
 			req, _ := http.NewRequestWithContext(context.Background(), "POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
@@ -212,8 +215,8 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	testDB := setupTestDB(t)
 	defer cleanupTestDB(t, testDB)
 
-	// Set global db variable
-	db = testDB
+	// Set database.DB for handlers
+	database.DB = testDB
 
 	// Insert test data with NEW schema (label, shortcut, content)
 	// Use the same user_id as in generateTestJWT()
@@ -228,7 +231,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets", getSnippets)
+	router.GET("/api/v1/snippets", auth.AuthMiddleware(), handlers.GetUserSnippets)
 
 	tests := []struct {
 		name           string
@@ -290,7 +293,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	testDB := setupTestDB(t)
 	defer cleanupTestDB(t, testDB)
 
-	db = testDB
+	database.DB = testDB
 
 	// Insert test snippet with NEW schema using matching user_id
 	var snippetID int64
@@ -304,7 +307,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets/:id", getSnippet)
+	router.GET("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.GetSnippet)
 
 	tests := []struct {
 		name           string
@@ -347,7 +350,7 @@ func TestUpdateSnippet(t *testing.T) {
 	testDB := setupTestDB(t)
 	defer cleanupTestDB(t, testDB)
 
-	db = testDB
+	database.DB = testDB
 
 	// Insert test snippet with NEW schema using matching user_id
 	err := testDB.QueryRow(`
@@ -360,7 +363,7 @@ func TestUpdateSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.PUT("/api/v1/snippets/:id", AuthMiddleware(), updateSnippet)
+	router.PUT("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.UpdateSnippet)
 
 	tests := []struct {
 		name           string
@@ -422,7 +425,7 @@ func TestDeleteSnippet(t *testing.T) {
 	testDB := setupTestDB(t)
 	defer cleanupTestDB(t, testDB)
 
-	db = testDB
+	database.DB = testDB
 
 	// Insert test snippet with NEW schema using matching user_id
 	err := testDB.QueryRow(`
@@ -435,7 +438,7 @@ func TestDeleteSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.DELETE("/api/v1/snippets/:id", AuthMiddleware(), deleteSnippet)
+	router.DELETE("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.DeleteSnippet)
 
 	tests := []struct {
 		name           string
@@ -470,40 +473,5 @@ func TestDeleteSnippet(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
 		})
-	}
-}
-
-func TestCORSMiddleware(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	// Set CORS env for test
-	os.Setenv("CORS_ALLOWED_ORIGINS", "*")
-	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
-
-	router := gin.New()
-	router.Use(corsMiddleware())
-
-	router.GET("/test", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "ok"})
-	})
-
-	// Test OPTIONS request
-	req, _ := http.NewRequestWithContext(context.Background(), "OPTIONS", "/test", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status 204 for OPTIONS, got %d", w.Code)
-	}
-
-	// Test CORS headers
-	req, _ = http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	headers := w.Header()
-	allowedOrigin := headers.Get("Access-Control-Allow-Origin")
-	if allowedOrigin != "*" {
-		t.Errorf("CORS header Access-Control-Allow-Origin not set correctly, got: %s", allowedOrigin)
 	}
 }

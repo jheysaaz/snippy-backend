@@ -255,14 +255,17 @@ func getSnippets(c *gin.Context) {
 
 **Endpoints:**
 
+- `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/login` - User login
-- `GET /api/v1/users` - List all users
-- `GET /api/v1/users/:id` - Get user by ID
-- `GET /api/v1/users/username/:username` - Get user by username
-- `POST /api/v1/users` - Create user (register)
-- `PUT /api/v1/users/:id` - Update user
-- `DELETE /api/v1/users/:id` - Delete user
-- `GET /api/v1/users/:id/snippets` - Get user's snippets
+- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - Logout (revoke refresh token)
+- `POST /api/v1/auth/logout-all` - Logout from all devices
+- `GET /api/v1/users` - List all users (protected)
+- `GET /api/v1/users/profile` - Get current user profile (protected)
+- `PUT /api/v1/users/profile` - Update current user profile (protected)
+- `GET /api/v1/users/:id` - Get user by ID (protected)
+- `PUT /api/v1/users/:id` - Update user (protected)
+- `DELETE /api/v1/users/:id` - Delete user (protected)
 
 **Security Features:**
 

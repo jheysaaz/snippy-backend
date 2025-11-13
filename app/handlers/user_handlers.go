@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"database/sql"
@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/jheysaaz/snippy-backend/app/auth"
+	"github.com/jheysaaz/snippy-backend/app/database"
+	"github.com/jheysaaz/snippy-backend/app/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,29 +22,29 @@ func getUsers(c *gin.Context) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := db.Query(query)
+	rows, err := database.DB.Query(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		respondError(c, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
 	defer rows.Close()
 
-	users := make([]User, 0, 10) // Pre-allocate with reasonable capacity
+	users := make([]models.User, 0, 10)
 	for rows.Next() {
-		user, err := scanUser(rows)
+		user, err := models.ScanUser(rows)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan user"})
+			respondError(c, http.StatusInternalServerError, "Failed to scan user")
 			return
 		}
 		users = append(users, *user)
 	}
 
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error iterating users"})
+		respondError(c, http.StatusInternalServerError, "Error iterating users")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": users, "count": len(users)})
+	respondWithCount(c, users, len(users))
 }
 
 // getUser retrieves a single user by ID
@@ -53,18 +57,13 @@ func getUser(c *gin.Context) {
 		WHERE id = $1
 	`
 
-	row := db.QueryRow(query, id)
-	user, err := scanUser(row)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user"})
+	row := database.DB.QueryRow(query, id)
+	user, err := models.ScanUser(row)
+	if handleScanError(c, err, "User not found") {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	respondSuccess(c, http.StatusOK, user)
 }
 
 // getUserByUsername retrieves a user by username
@@ -77,32 +76,27 @@ func getUserByUsername(c *gin.Context) {
 		WHERE username = $1
 	`
 
-	row := db.QueryRow(query, username)
-	user, err := scanUser(row)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user"})
+	row := database.DB.QueryRow(query, username)
+	user, err := models.ScanUser(row)
+	if handleScanError(c, err, "User not found") {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	respondSuccess(c, http.StatusOK, user)
 }
 
 // createUser creates a new user
 func createUser(c *gin.Context) {
-	var req CreateUserRequest
+	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Hash the password
-	passwordHash, err := HashPassword(req.Password)
+	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		respondError(c, http.StatusInternalServerError, "Failed to process password")
 		return
 	}
 
@@ -112,7 +106,7 @@ func createUser(c *gin.Context) {
 		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
 	`
 
-	row := db.QueryRow(
+	row := database.DB.QueryRow(
 		query,
 		req.Username,
 		req.Email,
@@ -121,29 +115,29 @@ func createUser(c *gin.Context) {
 		req.AvatarURL,
 	)
 
-	user, err := scanUser(row)
+	user, err := models.ScanUser(row)
 	if err != nil {
 		// Check for unique constraint violation
 		if strings.Contains(err.Error(), "duplicate key") {
 			switch {
 			case strings.Contains(err.Error(), "username"):
-				c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+				respondError(c, http.StatusConflict, "Username already exists")
 			case strings.Contains(err.Error(), "email"):
-				c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+				respondError(c, http.StatusConflict, "Email already exists")
 			default:
-				c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
+				respondError(c, http.StatusConflict, "User already exists")
 			}
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		respondError(c, http.StatusInternalServerError, "Failed to create user")
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	respondSuccess(c, http.StatusCreated, user)
 }
 
 // buildUserUpdateQuery constructs the dynamic UPDATE query for user updates
-func buildUserUpdateQuery(req *UpdateUserRequest) ([]string, []interface{}, error) {
+func buildUserUpdateQuery(req *models.UpdateUserRequest) ([]string, []interface{}, error) {
 	updates := []string{}
 	args := []interface{}{}
 	argPos := 1
@@ -159,7 +153,7 @@ func buildUserUpdateQuery(req *UpdateUserRequest) ([]string, []interface{}, erro
 		argPos++
 	}
 	if req.Password != nil && *req.Password != "" {
-		hash, err := HashPassword(*req.Password)
+		hash, err := auth.HashPassword(*req.Password)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -185,19 +179,18 @@ func updateUser(c *gin.Context) {
 	id := c.Param("id")
 
 	// Get authenticated user ID
-	authUserID, exists := GetUserIDFromContext(c)
+	authUserID, exists := auth.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
 	// Check if user is updating their own profile
-	if authUserID != id {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You can only update your own profile"})
+	if !checkOwnership(c, id, authUserID, "profile") {
 		return
 	}
 
-	var req UpdateUserRequest
+	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -206,12 +199,12 @@ func updateUser(c *gin.Context) {
 	// Build dynamic UPDATE query based on provided fields
 	updates, args, err := buildUserUpdateQuery(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		respondError(c, http.StatusInternalServerError, "Failed to process password")
 		return
 	}
 
 	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		respondError(c, http.StatusBadRequest, "No fields to update")
 		return
 	}
 
@@ -226,10 +219,10 @@ func updateUser(c *gin.Context) {
 		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
 	`
 
-	row := db.QueryRow(query, args...)
-	user, err := scanUser(row)
+	row := database.DB.QueryRow(query, args...)
+	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		respondError(c, http.StatusNotFound, "User not found")
 		return
 	}
 	if err != nil {
@@ -237,19 +230,19 @@ func updateUser(c *gin.Context) {
 		if strings.Contains(err.Error(), "duplicate key") {
 			switch {
 			case strings.Contains(err.Error(), "username"):
-				c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+				respondError(c, http.StatusConflict, "Username already exists")
 			case strings.Contains(err.Error(), "email"):
-				c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+				respondError(c, http.StatusConflict, "Email already exists")
 			default:
-				c.JSON(http.StatusConflict, gin.H{"error": "Duplicate value"})
+				respondError(c, http.StatusConflict, "Duplicate value")
 			}
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+		respondError(c, http.StatusInternalServerError, "Failed to update user")
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	respondSuccess(c, http.StatusOK, user)
 }
 
 // deleteUser deletes a user
@@ -257,38 +250,36 @@ func deleteUser(c *gin.Context) {
 	id := c.Param("id")
 
 	// Get authenticated user ID
-	authUserID, exists := GetUserIDFromContext(c)
+	authUserID, exists := getAuthUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
 	// Check if user is deleting their own account
-	if authUserID != id {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You can only delete your own account"})
+	if !checkOwnership(c, id, authUserID, "account") {
 		return
 	}
 
 	query := `DELETE FROM users WHERE id = $1`
 
-	result, err := db.Exec(query, id)
+	result, err := database.DB.Exec(query, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
+		respondError(c, http.StatusInternalServerError, "Failed to delete user")
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify deletion"})
+		respondError(c, http.StatusInternalServerError, "Failed to verify deletion")
 		return
 	}
 
 	if rowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		respondError(c, http.StatusNotFound, "User not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
+	respondSuccess(c, http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
 
 // getUserSnippets retrieves all snippets for a specific user
@@ -302,34 +293,34 @@ func getUserSnippets(c *gin.Context) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := db.Query(query, id)
+	rows, err := database.DB.Query(query, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user snippets"})
+		respondError(c, http.StatusInternalServerError, "Failed to fetch user snippets")
 		return
 	}
 	defer rows.Close()
 
-	snippets := make([]Snippet, 0, 10) // Pre-allocate with reasonable capacity
+	snippets := make([]models.Snippet, 0, 10)
 	for rows.Next() {
-		snippet, err := scanSnippet(rows)
+		snippet, err := models.ScanSnippet(rows)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan snippet"})
+			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
 			return
 		}
 		snippets = append(snippets, *snippet)
 	}
 
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error iterating snippets"})
+		respondError(c, http.StatusInternalServerError, "Error iterating snippets")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"snippets": snippets, "count": len(snippets)})
+	respondWithCount(c, snippets, len(snippets))
 }
 
 // login handles user login with username or email and password
 func login(c *gin.Context) {
-	var req LoginRequest
+	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -342,34 +333,34 @@ func login(c *gin.Context) {
 		WHERE username = $1 OR email = $1
 	`
 
-	row := db.QueryRow(query, req.Login)
-	user, err := scanUser(row)
+	row := database.DB.QueryRow(query, req.Login)
+	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username/email or password"})
+		respondError(c, http.StatusUnauthorized, "Invalid username/email or password")
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
+		respondError(c, http.StatusInternalServerError, "Failed to authenticate")
 		return
 	}
 
 	// Check password
-	if !CheckPassword(req.Password, user.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username/email or password"})
+	if !auth.CheckPassword(req.Password, user.PasswordHash) {
+		respondError(c, http.StatusUnauthorized, "Invalid username/email or password")
 		return
 	}
 
 	// Generate JWT access token (short-lived)
-	accessToken, err := GenerateAccessToken(user)
+	accessToken, err := auth.GenerateAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+		respondError(c, http.StatusInternalServerError, "Failed to generate access token")
 		return
 	}
 
 	// Generate refresh token (long-lived)
-	refreshToken, err := generateRefreshToken()
+	refreshToken, err := models.GenerateRefreshToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		respondError(c, http.StatusInternalServerError, "Failed to generate refresh token")
 		return
 	}
 
@@ -377,40 +368,40 @@ func login(c *gin.Context) {
 	deviceInfo := c.GetHeader("User-Agent")
 
 	// Store refresh token in database
-	if err := storeRefreshToken(user.ID, refreshToken, deviceInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+	if err := models.StoreRefreshToken(user.ID, refreshToken, deviceInfo); err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to store refresh token")
 		return
 	}
 
 	// Return user info and both tokens
-	response := LoginResponse{
+	response := models.LoginResponse{
 		User:         user,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    int64(AccessTokenDuration.Seconds()),
+		ExpiresIn:    int64(models.AccessTokenDuration.Seconds()),
 	}
 
-	c.JSON(http.StatusOK, response)
+	respondSuccess(c, http.StatusOK, response)
 }
 
 // refreshAccessToken generates a new access token using a valid refresh token
 func refreshAccessToken(c *gin.Context) {
-	var req RefreshTokenRequest
+	var req models.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Validate refresh token
-	rt, err := validateRefreshToken(req.RefreshToken)
+	rt, err := models.ValidateRefreshToken(req.RefreshToken)
 	if err != nil {
 		switch err {
-		case ErrTokenExpired:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired, please login again"})
-		case ErrTokenRevoked:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token revoked, please login again"})
+		case models.ErrTokenExpired:
+			respondError(c, http.StatusUnauthorized, "Refresh token expired, please login again")
+		case models.ErrTokenRevoked:
+			respondError(c, http.StatusUnauthorized, "Refresh token revoked, please login again")
 		default:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+			respondError(c, http.StatusUnauthorized, "Invalid refresh token")
 		}
 		return
 	}
@@ -422,70 +413,64 @@ func refreshAccessToken(c *gin.Context) {
 		WHERE id = $1
 	`
 
-	row := db.QueryRow(query, rt.UserID)
-	user, err := scanUser(row)
+	row := database.DB.QueryRow(query, rt.UserID)
+	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		respondError(c, http.StatusUnauthorized, "User not found")
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user"})
+		respondError(c, http.StatusInternalServerError, "Failed to fetch user")
 		return
 	}
 
 	// Generate new access token
-	accessToken, err := GenerateAccessToken(user)
+	accessToken, err := auth.GenerateAccessToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+		respondError(c, http.StatusInternalServerError, "Failed to generate access token")
 		return
 	}
 
 	// Return new access token
-	response := RefreshTokenResponse{
+	response := models.RefreshTokenResponse{
 		AccessToken: accessToken,
-		ExpiresIn:   int64(AccessTokenDuration.Seconds()),
+		ExpiresIn:   int64(models.AccessTokenDuration.Seconds()),
 	}
 
-	c.JSON(http.StatusOK, response)
+	respondSuccess(c, http.StatusOK, response)
 }
 
 // logout revokes the refresh token
 func logout(c *gin.Context) {
-	var req RefreshTokenRequest
+	var req models.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Revoke the refresh token
-	if err := revokeRefreshToken(req.RefreshToken); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+	if err := models.RevokeRefreshToken(req.RefreshToken); err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to logout")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+	respondSuccess(c, http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
 // logoutAll revokes all refresh tokens for the authenticated user
 func logoutAll(c *gin.Context) {
 	// Get user ID from JWT token in context (set by AuthMiddleware)
-	userID, exists := c.Get("user_id")
+	userID, exists := getAuthUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
 	// Revoke all tokens for this user
-	userIDStr, ok := userID.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID type"})
-		return
-	}
-	if err := revokeAllUserTokens(userIDStr); err != nil {
-		log.Printf("Failed to revoke all tokens for user %v: %v", userIDStr, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout from all devices"})
+	if err := models.RevokeAllUserTokens(userID); err != nil {
+		log.Printf("Failed to revoke all tokens for user %v: %v", userID, err)
+		respondError(c, http.StatusInternalServerError, "Failed to logout from all devices")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out from all devices successfully"})
+	respondSuccess(c, http.StatusOK, gin.H{"message": "Logged out from all devices successfully"})
 }

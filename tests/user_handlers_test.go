@@ -6,9 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jheysaaz/snippy-backend/app/auth"
+	"github.com/jheysaaz/snippy-backend/app/database"
+	"github.com/jheysaaz/snippy-backend/app/handlers"
+	"github.com/jheysaaz/snippy-backend/app/models"
 )
 
 func TestLoginWithUsernameOrEmail(t *testing.T) {
@@ -20,36 +25,38 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 		}
 	}()
 
-	// Initialize schema
-	// Set global db variable first
-	db = testDB
+	// Initialize database
+	dbURL := getHandlersTestDBURL()
+	os.Setenv("DATABASE_URL", dbURL)
+	defer os.Unsetenv("DATABASE_URL")
 
-	if err := initDatabase(); err != nil {
+	if err := database.Init(); err != nil {
 		t.Fatalf("Failed to initialize database: %v", err)
 	}
+	defer database.DB.Close()
 
-	// Set global db variable
-	db = testDB
+	// Set database.DB for handlers
+	database.DB = testDB
 
 	// Clean up any existing test users
 	_, _ = testDB.Exec(`DELETE FROM users WHERE username = 'testuser' OR email = 'test@example.com'`)
 
 	// Create a test user with all fields
-	hashedPassword, err := HashPassword("testpassword123")
+	hashedPassword, err := auth.HashPassword("testpassword123")
 	if err != nil {
 		t.Fatalf("Failed to hash password: %v", err)
 	}
 
 	_, err = testDB.Exec(`
-		INSERT INTO users (username, email, password_hash, full_name, avatar_url)
-		VALUES ('testuser', 'test@example.com', $1, 'Test User', 'https://example.com/avatar.png')
+		INSERT INTO users (username, email, password_hash)
+		VALUES ('testuser', 'test@example.com', $1)
 	`, hashedPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
 	router := gin.New()
-	router.POST("/api/v1/auth/login", login)
+	router.POST("/api/v1/auth/login", handlers.Login)
 
 	tests := []struct {
 		name           string
@@ -90,7 +97,7 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			loginReq := LoginRequest{
+			loginReq := models.LoginRequest{
 				Login:    tt.loginValue,
 				Password: tt.password,
 			}
@@ -107,7 +114,7 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 			}
 
 			if tt.expectToken {
-				var response LoginResponse
+				var response models.LoginResponse
 				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 					t.Fatalf("Failed to parse response: %v", err)
 				}

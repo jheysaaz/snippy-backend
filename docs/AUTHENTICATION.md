@@ -19,8 +19,8 @@ Snippy Backend implements **JWT (JSON Web Token)** based authentication with **R
 
 ### Initial Login (First Time)
 ```
-1. User registers → POST /api/v1/users
-2. User logs in → POST /api/v1/auth/login 
+1. User registers → POST /api/v1/auth/register
+2. User logs in → POST /api/v1/auth/login
    → Receives: accessToken (15 min) + refreshToken (30 days)
 3. Client stores both tokens securely
 ```
@@ -74,12 +74,10 @@ Snippy Backend implements **JWT (JSON Web Token)** based authentication with **R
 ### Public Endpoints (No Authentication Required)
 
 - `GET /api/v1/health` - Health check
-- `POST /api/v1/users` - User registration
+- `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/login` - User login (returns both tokens)
 - `POST /api/v1/auth/refresh` - Refresh access token
 - `POST /api/v1/auth/logout` - Logout (revoke refresh token)
-- `GET /api/v1/snippets` - View all snippets
-- `GET /api/v1/snippets/:id` - View a single snippet
 
 ### Protected Endpoints (Authentication Required)
 
@@ -89,15 +87,18 @@ Snippy Backend implements **JWT (JSON Web Token)** based authentication with **R
 **User Management:**
 
 - `GET /api/v1/users` - List all users (requires auth)
+- `GET /api/v1/users/profile` - Get current user profile (requires auth)
+- `PUT /api/v1/users/profile` - Update current user profile (requires auth)
 - `GET /api/v1/users/:id` - Get user details (requires auth)
-- `GET /api/v1/users/username/:username` - Get user by username (requires auth)
-- `PUT /api/v1/users/:id` - Update user (can only update own profile)
-- `DELETE /api/v1/users/:id` - Delete user (can only delete own account)
-- `GET /api/v1/users/:id/snippets` - Get user's snippets (requires auth)
+- `PUT /api/v1/users/:id` - Update user (requires auth)
+- `DELETE /api/v1/users/:id` - Delete user (requires auth)
 
 **Snippet Management:**
+- `GET /api/v1/snippets` - Get current user's snippets (requires auth)
 - `POST /api/v1/snippets` - Create snippet (requires auth, automatically assigned to user)
+- `GET /api/v1/snippets/:id` - Get snippet details (requires auth)
 - `PUT /api/v1/snippets/:id` - Update snippet (can only update own snippets)
+- `DELETE /api/v1/snippets/:id` - Delete snippet (can only delete own snippets)
 - `DELETE /api/v1/snippets/:id` - Delete snippet (can only delete own snippets)
 
 ---
@@ -107,7 +108,7 @@ Snippy Backend implements **JWT (JSON Web Token)** based authentication with **R
 ### 1. Register a New User
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/users \
+curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "johndoe",
@@ -528,7 +529,7 @@ openssl rand -base64 64
 
 ```bash
 # 1. Register
-USER_RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/users \
+USER_RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","email":"test@example.com","password":"test123"}')
 

@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main, dev]
-    tags-ignore:
-      - 'v*.*.*'  # Don't run CI on tags (deploy workflow handles that)
+    tags:
+      - 'v*.*.*'  # Run CI on version tags
   pull_request:
     branches: [main, dev]
 
@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
@@ -69,10 +69,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
@@ -93,10 +93,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
@@ -123,19 +123,25 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
 
-      - name: Build
-        run: go build -v -o snippy-api .
+      - name: Build for production
+        run: |
+          # Build optimized binary for Linux AMD64 (production servers)
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snippy-api .
 
-      - name: Upload Binary
-        uses: actions/upload-artifact@v4
+          # Verify the binary
+          ls -lh snippy-api
+          file snippy-api
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v5
         with:
           name: snippy-api
           path: snippy-api

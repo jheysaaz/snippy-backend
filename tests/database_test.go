@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/lib/pq"
 )
 
@@ -48,14 +49,18 @@ func TestInitDatabase(t *testing.T) {
 
 	// Clean up
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 
-	// Set global db for initDatabase function
-	db = testDB
+	// Set DATABASE_URL for database.Init()
+	os.Setenv("DATABASE_URL", dbURL)
+	defer os.Unsetenv("DATABASE_URL")
 
 	// Test schema initialization
-	if initErr := initDatabase(); initErr != nil {
-		t.Fatalf("initDatabase failed: %v", initErr)
+	if initErr := database.Init(); initErr != nil {
+		t.Fatalf("database.Init failed: %v", initErr)
 	}
+	defer database.DB.Close()
 
 	// Verify table exists
 	var exists bool
@@ -130,16 +135,19 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
-	// Set global db
-	db = testDB
-
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
-	if initErr := initDatabase(); initErr != nil {
-		t.Fatalf("initDatabase failed: %v", initErr)
+
+	// Set DATABASE_URL for database.Init()
+	os.Setenv("DATABASE_URL", dbURL)
+	defer os.Unsetenv("DATABASE_URL")
+
+	if initErr := database.Init(); initErr != nil {
+		t.Fatalf("database.Init failed: %v", initErr)
 	}
+	defer database.DB.Close()
 
 	// Create a test user with unique username
 	username := "testuser_schema_" + time.Now().Format("20060102150405")
@@ -198,15 +206,19 @@ func TestDatabaseTrigger(t *testing.T) {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
-	db = testDB
-
 	// Clean up and initialize
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
-	if initErr := initDatabase(); initErr != nil {
-		t.Fatalf("initDatabase failed: %v", initErr)
+
+	// Set DATABASE_URL for database.Init()
+	os.Setenv("DATABASE_URL", dbURL)
+	defer os.Unsetenv("DATABASE_URL")
+
+	if initErr := database.Init(); initErr != nil {
+		t.Fatalf("database.Init failed: %v", initErr)
 	}
+	defer database.DB.Close()
 
 	// Create a test user first with unique data
 	var testUserID string

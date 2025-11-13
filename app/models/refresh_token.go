@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"crypto/rand"
@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"time"
+
+	"github.com/jheysaaz/snippy-backend/app/database"
 )
 
 // Refresh token errors
@@ -15,15 +17,15 @@ var (
 )
 
 const (
-	// AccessTokenDuration - short-lived access token (15 minutes)
-	AccessTokenDuration = 15 * time.Minute
+	// AccessTokenDuration - short-lived access token (30 minutes)
+	AccessTokenDuration = 30 * time.Minute
 
-	// RefreshTokenDuration - long-lived refresh token (30 days)
-	RefreshTokenDuration = 30 * 24 * time.Hour
+	// RefreshTokenDuration - long-lived refresh token (90 days)
+	RefreshTokenDuration = 3 * 30 * 24 * time.Hour
 )
 
 // generateRefreshToken creates a cryptographically secure random token
-func generateRefreshToken() (string, error) {
+func GenerateRefreshToken() (string, error) {
 	// 32 bytes = 256 bits of entropy
 	bytes := make([]byte, 32)
 	_, err := rand.Read(bytes)
@@ -36,10 +38,10 @@ func generateRefreshToken() (string, error) {
 }
 
 // storeRefreshToken saves a refresh token to the database
-func storeRefreshToken(userID, token, deviceInfo string) error {
+func StoreRefreshToken(userID, token, deviceInfo string) error {
 	expiresAt := time.Now().Add(RefreshTokenDuration)
 
-	_, err := db.Exec(`
+	_, err := database.DB.Exec(`
 		INSERT INTO refresh_tokens (user_id, token, expires_at, device_info)
 		VALUES ($1, $2, $3, $4)
 	`, userID, token, expiresAt, deviceInfo)
@@ -48,10 +50,10 @@ func storeRefreshToken(userID, token, deviceInfo string) error {
 }
 
 // validateRefreshToken checks if a refresh token is valid and not expired/revoked
-func validateRefreshToken(token string) (*RefreshToken, error) {
+func ValidateRefreshToken(token string) (*RefreshToken, error) {
 	var rt RefreshToken
 
-	err := db.QueryRow(`
+	err := database.DB.QueryRow(`
 		SELECT id, user_id, token, expires_at, created_at, revoked, device_info
 		FROM refresh_tokens
 		WHERE token = $1
@@ -83,8 +85,8 @@ func validateRefreshToken(token string) (*RefreshToken, error) {
 }
 
 // revokeRefreshToken marks a refresh token as revoked
-func revokeRefreshToken(token string) error {
-	_, err := db.Exec(`
+func RevokeRefreshToken(token string) error {
+	_, err := database.DB.Exec(`
 		UPDATE refresh_tokens
 		SET revoked = TRUE
 		WHERE token = $1
@@ -94,8 +96,8 @@ func revokeRefreshToken(token string) error {
 }
 
 // revokeAllUserTokens revokes all refresh tokens for a user
-func revokeAllUserTokens(userID string) error {
-	_, err := db.Exec(`
+func RevokeAllUserTokens(userID string) error {
+	_, err := database.DB.Exec(`
 		UPDATE refresh_tokens
 		SET revoked = TRUE
 		WHERE user_id = $1 AND revoked = FALSE
@@ -105,9 +107,9 @@ func revokeAllUserTokens(userID string) error {
 }
 
 // cleanupExpiredTokens removes expired and revoked tokens (run periodically)
-func cleanupExpiredTokens() error {
+func CleanupExpiredTokens() error {
 	// Delete tokens that expired more than 7 days ago
-	_, err := db.Exec(`
+	_, err := database.DB.Exec(`
 		DELETE FROM refresh_tokens
 		WHERE (expires_at < NOW() - INTERVAL '7 days')
 		   OR (revoked = TRUE AND created_at < NOW() - INTERVAL '7 days')
@@ -122,7 +124,7 @@ func startTokenCleanupJob() {
 	defer ticker.Stop()
 
 	// Run immediately on start
-	if err := cleanupExpiredTokens(); err != nil {
+	if err := CleanupExpiredTokens(); err != nil {
 		log.Printf("Token cleanup failed: %v", err)
 	} else {
 		log.Println("Token cleanup completed successfully")
@@ -130,7 +132,7 @@ func startTokenCleanupJob() {
 
 	// Then run periodically
 	for range ticker.C {
-		if err := cleanupExpiredTokens(); err != nil {
+		if err := CleanupExpiredTokens(); err != nil {
 			log.Printf("Token cleanup failed: %v", err)
 		} else {
 			log.Println("Token cleanup completed successfully")

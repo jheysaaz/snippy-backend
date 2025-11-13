@@ -1,10 +1,13 @@
-package main
+package handlers
 
 import (
 	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/jheysaaz/snippy-backend/app/database"
+	"github.com/jheysaaz/snippy-backend/app/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
@@ -53,29 +56,29 @@ func getSnippets(c *gin.Context) {
 		}
 	}
 
-	rows, err := db.Query(query, args...)
+	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch snippets"})
+		respondError(c, http.StatusInternalServerError, "Failed to fetch snippets")
 		return
 	}
 	defer rows.Close()
 
-	snippets := make([]Snippet, 0, 10) // Pre-allocate with reasonable capacity
+	snippets := make([]models.Snippet, 0, 10)
 	for rows.Next() {
-		snippet, err := scanSnippet(rows)
+		snippet, err := models.ScanSnippet(rows)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan snippet"})
+			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
 			return
 		}
 		snippets = append(snippets, *snippet)
 	}
 
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error iterating snippets"})
+		respondError(c, http.StatusInternalServerError, "Error iterating snippets")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"snippets": snippets, "count": len(snippets)})
+	respondWithCount(c, snippets, len(snippets))
 }
 
 // getSnippet retrieves a single snippet by ID
@@ -83,7 +86,7 @@ func getSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid snippet ID"})
+		respondError(c, http.StatusBadRequest, "Invalid snippet ID")
 		return
 	}
 
@@ -93,32 +96,26 @@ func getSnippet(c *gin.Context) {
 		WHERE id = $1
 	`
 
-	row := db.QueryRow(query, id)
-	snippet, err := scanSnippet(row)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch snippet"})
+	row := database.DB.QueryRow(query, id)
+	snippet, err := models.ScanSnippet(row)
+	if handleScanError(c, err, "Snippet not found") {
 		return
 	}
 
-	c.JSON(http.StatusOK, snippet)
+	respondSuccess(c, http.StatusOK, snippet)
 }
 
 // createSnippet creates a new snippet
 func createSnippet(c *gin.Context) {
-	var req CreateSnippetRequest
+	var req models.CreateSnippetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Get authenticated user ID from context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := getAuthUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
@@ -133,7 +130,7 @@ func createSnippet(c *gin.Context) {
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := db.QueryRow(
+	row := database.DB.QueryRow(
 		query,
 		req.Label,
 		req.Shortcut,
@@ -142,17 +139,17 @@ func createSnippet(c *gin.Context) {
 		userID, // Use authenticated user ID
 	)
 
-	snippet, err := scanSnippet(row)
+	snippet, err := models.ScanSnippet(row)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create snippet"})
+		respondError(c, http.StatusInternalServerError, "Failed to create snippet")
 		return
 	}
 
-	c.JSON(http.StatusCreated, snippet)
+	respondSuccess(c, http.StatusCreated, snippet)
 }
 
 // buildSnippetUpdateQuery constructs the dynamic UPDATE query for snippet updates
-func buildSnippetUpdateQuery(req *UpdateSnippetRequest) ([]string, []interface{}) {
+func buildSnippetUpdateQuery(req *models.UpdateSnippetRequest) ([]string, []interface{}) {
 	updates := []string{}
 	args := []interface{}{}
 	argPos := 1
@@ -185,21 +182,20 @@ func updateSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid snippet ID"})
+		respondError(c, http.StatusBadRequest, "Invalid snippet ID")
 		return
 	}
 
 	// Get authenticated user ID
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := getAuthUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = db.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -210,12 +206,11 @@ func updateSnippet(c *gin.Context) {
 	}
 
 	// Verify ownership
-	if !snippetUserID.Valid || snippetUserID.String != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to update this snippet"})
+	if !snippetUserID.Valid || !checkOwnership(c, snippetUserID.String, userID, "snippet") {
 		return
 	}
 
-	var req UpdateSnippetRequest
+	var req models.UpdateSnippetRequest
 	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": bindErr.Error()})
 		return
@@ -225,7 +220,7 @@ func updateSnippet(c *gin.Context) {
 	updates, args := buildSnippetUpdateQuery(&req)
 
 	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		respondError(c, http.StatusBadRequest, "No fields to update")
 		return
 	}
 
@@ -240,18 +235,13 @@ func updateSnippet(c *gin.Context) {
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := db.QueryRow(query, args...)
-	snippet, err := scanSnippet(row)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update snippet"})
+	row := database.DB.QueryRow(query, args...)
+	snippet, err := models.ScanSnippet(row)
+	if handleScanError(c, err, "Snippet not found") {
 		return
 	}
 
-	c.JSON(http.StatusOK, snippet)
+	respondSuccess(c, http.StatusOK, snippet)
 }
 
 // deleteSnippet deletes a snippet
@@ -259,21 +249,20 @@ func deleteSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid snippet ID"})
+		respondError(c, http.StatusBadRequest, "Invalid snippet ID")
 		return
 	}
 
 	// Get authenticated user ID
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := getAuthUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = db.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -284,29 +273,28 @@ func deleteSnippet(c *gin.Context) {
 	}
 
 	// Verify ownership
-	if !snippetUserID.Valid || snippetUserID.String != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete this snippet"})
+	if !snippetUserID.Valid || !checkOwnership(c, snippetUserID.String, userID, "snippet") {
 		return
 	}
 
 	query := `DELETE FROM snippets WHERE id = $1`
 
-	result, err := db.Exec(query, id)
+	result, err := database.DB.Exec(query, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete snippet"})
+		respondError(c, http.StatusInternalServerError, "Failed to delete snippet")
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify deletion"})
+		respondError(c, http.StatusInternalServerError, "Failed to verify deletion")
 		return
 	}
 
 	if rowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
+		respondError(c, http.StatusNotFound, "Snippet not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Snippet deleted successfully"})
+	respondSuccess(c, http.StatusOK, gin.H{"message": "Snippet deleted successfully"})
 }
