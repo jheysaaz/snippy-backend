@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/jheysaaz/snippy-backend/app/models"
@@ -149,33 +148,7 @@ func createSnippet(c *gin.Context) {
 }
 
 // buildSnippetUpdateQuery constructs the dynamic UPDATE query for snippet updates
-func buildSnippetUpdateQuery(req *models.UpdateSnippetRequest) ([]string, []interface{}) {
-	updates := []string{}
-	args := []interface{}{}
-	argPos := 1
-
-	if req.Label != nil {
-		updates = append(updates, "label = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Label)
-		argPos++
-	}
-	if req.Shortcut != nil {
-		updates = append(updates, "shortcut = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Shortcut)
-		argPos++
-	}
-	if req.Content != nil {
-		updates = append(updates, "content = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Content)
-		argPos++
-	}
-	if req.Tags != nil {
-		updates = append(updates, "tags = $"+strconv.Itoa(argPos))
-		args = append(args, pq.Array(req.Tags))
-	}
-
-	return updates, args
-}
+// removed dynamic update builder in favor of static, parameterized UPDATE
 
 // updateSnippet updates an existing snippet
 func updateSnippet(c *gin.Context) {
@@ -216,26 +189,31 @@ func updateSnippet(c *gin.Context) {
 		return
 	}
 
-	// Build dynamic UPDATE query based on provided fields
-	updates, args := buildSnippetUpdateQuery(&req)
-
-	if len(updates) == 0 {
+	// Validate that at least one field is provided
+	if req.Label == nil && req.Shortcut == nil && req.Content == nil && req.Tags == nil {
 		respondError(c, http.StatusBadRequest, "No fields to update")
 		return
 	}
 
-	// Add ID as last argument
-	args = append(args, id)
-	argPos := len(args)
+	// Prepare nullable parameters for static, parameterized UPDATE
+	labelVal := valueOrNilString(req.Label)
+	shortcutVal := valueOrNilString(req.Shortcut)
+	contentVal := valueOrNilString(req.Content)
+	tagsVal := arrayOrNilStringSlice(req.Tags)
 
+	// Static UPDATE using COALESCE to only update provided fields
 	query := `
 		UPDATE snippets
-		SET ` + strings.Join(updates, ", ") + `
-		WHERE id = $` + strconv.Itoa(argPos) + `
+		SET
+			label = COALESCE($1, label),
+			shortcut = COALESCE($2, shortcut),
+			content = COALESCE($3, content),
+			tags = COALESCE($4, tags)
+		WHERE id = $5
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(query, args...)
+	row := database.DB.QueryRow(query, labelVal, shortcutVal, contentVal, tagsVal, id)
 	snippet, err := models.ScanSnippet(row)
 	if handleScanError(c, err, "Snippet not found") {
 		return

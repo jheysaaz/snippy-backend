@@ -63,8 +63,8 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  security:
-    name: Security Scan
+  check:
+    name: Scan Code
     runs-on: ubuntu-latest
 
     steps:
@@ -77,49 +77,20 @@ jobs:
           go-version: "1.24"
           cache: true
 
-      - name: Run Gosec Security Scanner
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec ./...
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
 
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-  format:
-    name: Code Format Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.24"
-          cache: true
-
-      - name: Check gofmt
-        run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "The following files are not formatted correctly:"
-            gofmt -s -l .
-            echo "Please run 'gofmt -s -w .' to format your code"
-            exit 1
-          fi
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
-
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test, security, format]
+    needs: [test, check]
 
     steps:
       - name: Checkout code

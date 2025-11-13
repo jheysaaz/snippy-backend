@@ -85,7 +85,7 @@ func main() {
 
 		// Protected routes (require authentication)
 		protected := api.Group("")
-		protected.Use(auth.AuthMiddleware())
+		protected.Use(auth.Middleware())
 		{
 			// User routes
 			users := protected.Group("/users")
@@ -118,6 +118,7 @@ func main() {
 
 	log.Printf("Server running on port %s", port)
 	if err := r.Run(":" + port); err != nil {
-		log.Fatal("Failed to start server:", err)
+		log.Printf("Failed to start server: %v", err)
+		return
 	}
 }

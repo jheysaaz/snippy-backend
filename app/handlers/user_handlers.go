@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
@@ -66,25 +64,6 @@ func getUser(c *gin.Context) {
 	respondSuccess(c, http.StatusOK, user)
 }
 
-// getUserByUsername retrieves a user by username
-func getUserByUsername(c *gin.Context) {
-	username := c.Param("username")
-
-	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
-		FROM users
-		WHERE username = $1
-	`
-
-	row := database.DB.QueryRow(query, username)
-	user, err := models.ScanUser(row)
-	if handleScanError(c, err, "User not found") {
-		return
-	}
-
-	respondSuccess(c, http.StatusOK, user)
-}
-
 // createUser creates a new user
 func createUser(c *gin.Context) {
 	var req models.CreateUserRequest
@@ -117,16 +96,7 @@ func createUser(c *gin.Context) {
 
 	user, err := models.ScanUser(row)
 	if err != nil {
-		// Check for unique constraint violation
-		if strings.Contains(err.Error(), "duplicate key") {
-			switch {
-			case strings.Contains(err.Error(), "username"):
-				respondError(c, http.StatusConflict, "Username already exists")
-			case strings.Contains(err.Error(), "email"):
-				respondError(c, http.StatusConflict, "Email already exists")
-			default:
-				respondError(c, http.StatusConflict, "User already exists")
-			}
+		if handleUserUniqueViolation(c, err) {
 			return
 		}
 		respondError(c, http.StatusInternalServerError, "Failed to create user")
@@ -136,57 +106,14 @@ func createUser(c *gin.Context) {
 	respondSuccess(c, http.StatusCreated, user)
 }
 
-// buildUserUpdateQuery constructs the dynamic UPDATE query for user updates
-func buildUserUpdateQuery(req *models.UpdateUserRequest) ([]string, []interface{}, error) {
-	updates := []string{}
-	args := []interface{}{}
-	argPos := 1
-
-	if req.Username != nil {
-		updates = append(updates, "username = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Username)
-		argPos++
-	}
-	if req.Email != nil {
-		updates = append(updates, "email = $"+strconv.Itoa(argPos))
-		args = append(args, *req.Email)
-		argPos++
-	}
-	if req.Password != nil && *req.Password != "" {
-		hash, err := auth.HashPassword(*req.Password)
-		if err != nil {
-			return nil, nil, err
-		}
-		updates = append(updates, "password_hash = $"+strconv.Itoa(argPos))
-		args = append(args, hash)
-		argPos++
-	}
-	if req.FullName != nil {
-		updates = append(updates, "full_name = $"+strconv.Itoa(argPos))
-		args = append(args, *req.FullName)
-		argPos++
-	}
-	if req.AvatarURL != nil {
-		updates = append(updates, "avatar_url = $"+strconv.Itoa(argPos))
-		args = append(args, *req.AvatarURL)
-	}
-
-	return updates, args, nil
-}
+// removed dynamic update builder in favor of static, parameterized UPDATE
 
 // updateUser updates an existing user
 func updateUser(c *gin.Context) {
 	id := c.Param("id")
 
-	// Get authenticated user ID
-	authUserID, exists := auth.GetUserIDFromContext(c)
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-		return
-	}
-
-	// Check if user is updating their own profile
-	if !checkOwnership(c, id, authUserID, "profile") {
+	// Ensure the authenticated user is updating their own profile
+	if !ensureOwnAccount(c, id) {
 		return
 	}
 
@@ -196,46 +123,43 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	// Build dynamic UPDATE query based on provided fields
-	updates, args, err := buildUserUpdateQuery(&req)
-	if err != nil {
-		respondError(c, http.StatusInternalServerError, "Failed to process password")
-		return
-	}
-
-	if len(updates) == 0 {
+	// Validate that at least one field is provided
+	if req.Username == nil && req.Email == nil && (req.Password == nil || *req.Password == "") && req.FullName == nil && req.AvatarURL == nil {
 		respondError(c, http.StatusBadRequest, "No fields to update")
 		return
 	}
 
-	// Add ID as last argument
-	args = append(args, id)
-	argPos := len(args)
+	// Prepare nullable parameters for static, parameterized UPDATE
+	usernameVal := valueOrNilString(req.Username)
+	emailVal := valueOrNilString(req.Email)
+	passwordHashVal, hashErr := hashedPasswordOrNil(req.Password)
+	if hashErr != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to process password")
+		return
+	}
+	fullNameVal := valueOrNilString(req.FullName)
+	avatarURLVal := valueOrNilString(req.AvatarURL)
 
 	query := `
 		UPDATE users
-		SET ` + strings.Join(updates, ", ") + `
-		WHERE id = $` + strconv.Itoa(argPos) + `
+		SET
+			username = COALESCE($1, username),
+			email = COALESCE($2, email),
+			password_hash = COALESCE($3, password_hash),
+			full_name = COALESCE($4, full_name),
+			avatar_url = COALESCE($5, avatar_url)
+		WHERE id = $6
 		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(query, args...)
+	row := database.DB.QueryRow(query, usernameVal, emailVal, passwordHashVal, fullNameVal, avatarURLVal, id)
 	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "User not found")
 		return
 	}
 	if err != nil {
-		// Check for unique constraint violation
-		if strings.Contains(err.Error(), "duplicate key") {
-			switch {
-			case strings.Contains(err.Error(), "username"):
-				respondError(c, http.StatusConflict, "Username already exists")
-			case strings.Contains(err.Error(), "email"):
-				respondError(c, http.StatusConflict, "Email already exists")
-			default:
-				respondError(c, http.StatusConflict, "Duplicate value")
-			}
+		if handleUserUniqueViolation(c, err) {
 			return
 		}
 		respondError(c, http.StatusInternalServerError, "Failed to update user")

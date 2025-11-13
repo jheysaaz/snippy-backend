@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/jheysaaz/snippy-backend/app/database"
@@ -116,26 +115,4 @@ func CleanupExpiredTokens() error {
 	`)
 
 	return err
-}
-
-// startTokenCleanupJob runs a background job to cleanup expired tokens
-func startTokenCleanupJob() {
-	ticker := time.NewTicker(24 * time.Hour) // Run once per day
-	defer ticker.Stop()
-
-	// Run immediately on start
-	if err := CleanupExpiredTokens(); err != nil {
-		log.Printf("Token cleanup failed: %v", err)
-	} else {
-		log.Println("Token cleanup completed successfully")
-	}
-
-	// Then run periodically
-	for range ticker.C {
-		if err := CleanupExpiredTokens(); err != nil {
-			log.Printf("Token cleanup failed: %v", err)
-		} else {
-			log.Println("Token cleanup completed successfully")
-		}
-	}
 }

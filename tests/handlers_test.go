@@ -194,7 +194,7 @@ func TestCreateSnippetValidation(t *testing.T) {
 
 			router := gin.New()
 			// Add auth middleware for create endpoint
-			router.POST("/api/v1/snippets", auth.AuthMiddleware(), handlers.CreateSnippet)
+			router.POST("/api/v1/snippets", auth.Middleware(), handlers.CreateSnippet)
 
 			req, _ := http.NewRequestWithContext(context.Background(), "POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
@@ -231,7 +231,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets", auth.AuthMiddleware(), handlers.GetUserSnippets)
+	router.GET("/api/v1/snippets", auth.Middleware(), handlers.GetUserSnippets)
 
 	tests := []struct {
 		name           string
@@ -307,7 +307,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.GetSnippet)
+	router.GET("/api/v1/snippets/:id", auth.Middleware(), handlers.GetSnippet)
 
 	tests := []struct {
 		name           string
@@ -363,7 +363,7 @@ func TestUpdateSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.PUT("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.UpdateSnippet)
+	router.PUT("/api/v1/snippets/:id", auth.Middleware(), handlers.UpdateSnippet)
 
 	tests := []struct {
 		name           string
@@ -438,7 +438,7 @@ func TestDeleteSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.DELETE("/api/v1/snippets/:id", auth.AuthMiddleware(), handlers.DeleteSnippet)
+	router.DELETE("/api/v1/snippets/:id", auth.Middleware(), handlers.DeleteSnippet)
 
 	tests := []struct {
 		name           string
