@@ -17,8 +17,6 @@ on:
     workflows: ["CI"]
     types:
       - completed
-    branches:
-      - main
     tags:
       - 'v*.*.*'
 

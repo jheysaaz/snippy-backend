@@ -64,7 +64,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   check:
-    name: Scan Code
+    name: Check Lint & Security
     runs-on: ubuntu-latest
 
     steps:
