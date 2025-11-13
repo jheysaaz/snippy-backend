@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"bytes"
@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
-	"github.com/jheysaaz/snippy-backend/app/handlers"
 	"github.com/jheysaaz/snippy-backend/app/models"
 )
 
@@ -56,7 +55,7 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.POST("/api/v1/auth/login", handlers.Login)
+	router.POST("/api/v1/auth/login", Login)
 
 	tests := []struct {
 		name           string
