@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/lib/pq"
 )
 
@@ -52,15 +51,15 @@ func TestInitDatabase(t *testing.T) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 
-	// Set DATABASE_URL for database.Init()
+	// Set DATABASE_URL for Init()
 	os.Setenv("DATABASE_URL", dbURL)
 	defer os.Unsetenv("DATABASE_URL")
 
 	// Test schema initialization
-	if initErr := database.Init(); initErr != nil {
-		t.Fatalf("database.Init failed: %v", initErr)
+	if initErr := Init(); initErr != nil {
+		t.Fatalf("Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
+	defer DB.Close()
 
 	// Verify table exists
 	var exists bool
@@ -140,14 +139,14 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 
-	// Set DATABASE_URL for database.Init()
+	// Set DATABASE_URL for Init()
 	os.Setenv("DATABASE_URL", dbURL)
 	defer os.Unsetenv("DATABASE_URL")
 
-	if initErr := database.Init(); initErr != nil {
-		t.Fatalf("database.Init failed: %v", initErr)
+	if initErr := Init(); initErr != nil {
+		t.Fatalf("Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
+	defer DB.Close()
 
 	// Create a test user with unique username
 	username := "testuser_schema_" + time.Now().Format("20060102150405")
@@ -211,14 +210,14 @@ func TestDatabaseTrigger(t *testing.T) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 
-	// Set DATABASE_URL for database.Init()
+	// Set DATABASE_URL for Init()
 	os.Setenv("DATABASE_URL", dbURL)
 	defer os.Unsetenv("DATABASE_URL")
 
-	if initErr := database.Init(); initErr != nil {
-		t.Fatalf("database.Init failed: %v", initErr)
+	if initErr := Init(); initErr != nil {
+		t.Fatalf("Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
+	defer DB.Close()
 
 	// Create a test user first with unique data
 	var testUserID string

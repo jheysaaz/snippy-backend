@@ -20,27 +20,24 @@
 ### Database (`app/database/`)
 
 - `database.go` - Database connection and schema initialization
+- `database_test.go` - Database function tests
 
 ### HTTP Handlers (`app/handlers/`)
 
 - `handlers.go` - Snippet CRUD handlers
+- `handlers_test.go` - Snippet handler tests
 - `user_handlers.go` - User management handlers
+- `user_handlers_test.go` - User handler tests
 
 ### Models (`app/models/`)
 
 - `models.go` - Data structures and request/response models
+- `models_test.go` - Model and validation tests
 - `refresh_token.go` - JWT refresh token functionality
 
 ### Middleware (`app/middleware/`)
 
 - `rate_limiter.go` - Rate limiting middleware
-
-## Tests (`tests/`)
-
-- `database_test.go` - Database function tests
-- `handlers_test.go` - Snippet handler tests
-- `models_test.go` - Model and validation tests
-- `user_handlers_test.go` - User handler tests
 
 ## Documentation (`docs/`)
 
@@ -69,14 +66,14 @@
 
 1. **Organized Structure**: Related files are grouped in logical directories
 2. **Separation of Concerns**: Auth, database, handlers, models, and middleware are clearly separated
-3. **Centralized Tests**: All tests in `tests/` directory for easy discovery
+3. **Colocated Tests**: Test files are placed alongside the code they test for better maintainability
 4. **Logical Grouping**: Similar functionality is co-located
 5. **Scalable Architecture**: Easy to add new features in appropriate directories
 
 ## Benefits
 
 - **Easier Navigation**: Developers can quickly find relevant code
-- **Better Maintainability**: Related code is grouped together
+- **Better Maintainability**: Related code and tests are grouped together
 - **Cleaner Root**: Main directory is not cluttered with source files
-- **Standard Structure**: Follows common Go project patterns
-- **Test Organization**: All tests are easily discoverable
+- **Standard Structure**: Follows common Go project patterns with tests alongside source code
+- **Test Discovery**: Tests are easily discoverable next to the code they test
