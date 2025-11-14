@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"bytes"
@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
-	"github.com/jheysaaz/snippy-backend/app/handlers"
 	"github.com/jheysaaz/snippy-backend/app/models"
 )
 
@@ -48,15 +47,15 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 	}
 
 	_, err = testDB.Exec(`
-		INSERT INTO users (username, email, password_hash)
-		VALUES ('testuser', 'test@example.com', $1)
+		INSERT INTO users (username, email, password_hash, full_name, avatar_url)
+		VALUES ('testuser', 'test@example.com', $1, '', '')
 	`, hashedPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
 	router := gin.New()
-	router.POST("/api/v1/auth/login", handlers.Login)
+	router.POST("/api/v1/auth/login", Login)
 
 	tests := []struct {
 		name           string

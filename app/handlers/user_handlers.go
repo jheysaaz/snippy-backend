@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
@@ -210,14 +211,48 @@ func deleteUser(c *gin.Context) {
 func getUserSnippets(c *gin.Context) {
 	id := c.Param("id")
 
+	// Optional query parameters for filtering
+	tag := c.Query("tag")
+	search := c.Query("search")
+	limitStr := c.Query("limit")
+
+	// Build query with optional filters
 	query := `
 		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE user_id = $1
-		ORDER BY created_at DESC
 	`
+	args := []interface{}{id}
+	argPos := 2
 
-	rows, err := database.DB.Query(query, id)
+	if tag != "" {
+		query += " AND $" + strconv.Itoa(argPos) + " = ANY(tags)"
+		args = append(args, tag)
+		argPos++
+	}
+
+	if search != "" {
+		// Use full-text search index for better performance
+		query += " AND to_tsvector('english', coalesce(label, '')) @@ plainto_tsquery('english', $" + strconv.Itoa(argPos) + ")"
+		args = append(args, search)
+		argPos++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	// Add limit if provided (max 100)
+	if limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err == nil && limit > 0 {
+			if limit > 100 {
+				limit = 100 // Cap at 100 for performance
+			}
+			query += " LIMIT $" + strconv.Itoa(argPos)
+			args = append(args, limit)
+		}
+	}
+
+	rows, err := database.DB.Query(query, args...)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch user snippets")
 		return

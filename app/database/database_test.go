@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/lib/pq"
 )
 
@@ -57,11 +56,11 @@ func TestInitDatabase(t *testing.T) {
 	defer os.Unsetenv("DATABASE_URL")
 
 	// Test schema initialization
-	if initErr := database.Init(); initErr != nil {
-		t.Fatalf("database.Init failed: %v", initErr)
+	// Test schema initialization
+	if initErr := Init(); initErr != nil {
+		t.Fatalf("Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
-
+	defer DB.Close()
 	// Verify table exists
 	var exists bool
 	err = testDB.QueryRow(`
@@ -144,10 +143,10 @@ func TestDatabaseSchemaIntegrity(t *testing.T) {
 	os.Setenv("DATABASE_URL", dbURL)
 	defer os.Unsetenv("DATABASE_URL")
 
-	if initErr := database.Init(); initErr != nil {
+	if initErr := Init(); initErr != nil {
 		t.Fatalf("database.Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
+	defer DB.Close()
 
 	// Create a test user with unique username
 	username := "testuser_schema_" + time.Now().Format("20060102150405")
@@ -215,10 +214,10 @@ func TestDatabaseTrigger(t *testing.T) {
 	os.Setenv("DATABASE_URL", dbURL)
 	defer os.Unsetenv("DATABASE_URL")
 
-	if initErr := database.Init(); initErr != nil {
+	if initErr := Init(); initErr != nil {
 		t.Fatalf("database.Init failed: %v", initErr)
 	}
-	defer database.DB.Close()
+	defer DB.Close()
 
 	// Create a test user first with unique data
 	var testUserID string

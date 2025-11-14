@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
-	"github.com/jheysaaz/snippy-backend/app/handlers"
 	_ "github.com/lib/pq"
 )
 
@@ -80,7 +79,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 		username VARCHAR(50) UNIQUE NOT NULL,
 		email VARCHAR(255) UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		full_name VARCHAR(255),
+		avatar_url TEXT,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS snippets (
@@ -93,25 +95,35 @@ func setupTestDB(t *testing.T) *sql.DB {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS refresh_tokens (
+		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		token TEXT NOT NULL UNIQUE,
+		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		revoked BOOLEAN DEFAULT FALSE,
+		device_info TEXT
+	);
 	`
 	if _, execErr := testDB.Exec(schema); execErr != nil {
 		t.Fatalf("Failed to create test schema: %v", execErr)
 	}
 
+	// Delete existing test user if it exists (from previous test runs)
+	_, _ = testDB.Exec(`DELETE FROM users WHERE username = 'testuser' OR email = 'test@example.com' OR id = $1`, testUserID)
+
 	// Create test user with matching ID from generateTestJWT()
 	_, err = testDB.Exec(`
-		INSERT INTO users (id, username, email, password_hash)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO NOTHING
-	`, testUserID, "testuser", "test@example.com", "dummy-hash")
+		INSERT INTO users (id, username, email, password_hash, full_name, avatar_url)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, testUserID, "testuser", "test@example.com", "dummy-hash", "", "")
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
 	return testDB
-}
-
-// Clean up test database
+} // Clean up test database
 func cleanupTestDB(_ *testing.T, testDB *sql.DB) {
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
@@ -194,7 +206,7 @@ func TestCreateSnippetValidation(t *testing.T) {
 
 			router := gin.New()
 			// Add auth middleware for create endpoint
-			router.POST("/api/v1/snippets", auth.Middleware(), handlers.CreateSnippet)
+			router.POST("/api/v1/snippets", auth.Middleware(), CreateSnippet)
 
 			req, _ := http.NewRequestWithContext(context.Background(), "POST", "/api/v1/snippets", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
@@ -231,7 +243,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets", auth.Middleware(), handlers.GetUserSnippets)
+	router.GET("/api/v1/snippets", auth.Middleware(), GetCurrentUserSnippets)
 
 	tests := []struct {
 		name           string
@@ -265,6 +277,7 @@ func TestGetSnippetsEndpoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/v1/snippets"+tt.queryParams, nil)
+			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -307,7 +320,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/api/v1/snippets/:id", auth.Middleware(), handlers.GetSnippet)
+	router.GET("/api/v1/snippets/:id", auth.Middleware(), GetSnippet)
 
 	tests := []struct {
 		name           string
@@ -334,6 +347,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/v1/snippets/"+tt.snippetID, nil)
+			req.Header.Set("Authorization", "Bearer "+generateTestJWT())
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -363,7 +377,7 @@ func TestUpdateSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.PUT("/api/v1/snippets/:id", auth.Middleware(), handlers.UpdateSnippet)
+	router.PUT("/api/v1/snippets/:id", auth.Middleware(), UpdateSnippet)
 
 	tests := []struct {
 		name           string
@@ -438,7 +452,7 @@ func TestDeleteSnippet(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.DELETE("/api/v1/snippets/:id", auth.Middleware(), handlers.DeleteSnippet)
+	router.DELETE("/api/v1/snippets/:id", auth.Middleware(), DeleteSnippet)
 
 	tests := []struct {
 		name           string

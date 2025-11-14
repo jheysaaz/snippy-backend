@@ -9,6 +9,7 @@ on:
         required: true
         default: 'production'
         type: choice
+         # TODO: Implenent the option to deploy to diferents droplets depending on staging or production
         options:
           - production
           - staging
@@ -123,6 +124,16 @@ jobs:
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           source: "docker-compose.yml"
+          target: "/root/snippy-api/"
+          overwrite: true
+
+      - name: Copy .env.production file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: ".env.production"
           target: "/root/snippy-api/"
           overwrite: true
 

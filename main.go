@@ -101,7 +101,7 @@ func main() {
 			// Snippet routes
 			snippets := protected.Group("/snippets")
 			{
-				snippets.GET("/", handlers.GetUserSnippets)
+				snippets.GET("/", handlers.GetCurrentUserSnippets)
 				snippets.POST("/", handlers.CreateSnippet)
 				snippets.GET("/:id", handlers.GetSnippet)
 				snippets.PUT("/:id", handlers.UpdateSnippet)

@@ -55,3 +55,16 @@ func UpdateCurrentUser(c *gin.Context) {
 	c.Params = []gin.Param{{Key: "id", Value: userID}}
 	updateUser(c)
 }
+
+// GetCurrentUserSnippets returns snippets for the currently authenticated user
+func GetCurrentUserSnippets(c *gin.Context) {
+	userID, exists := auth.GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		return
+	}
+	// Add user_id as a query parameter so getSnippets can filter by it
+	// But actually, we need to modify the approach - let's call getUserSnippets with the ID
+	c.Params = []gin.Param{{Key: "id", Value: userID}}
+	getUserSnippets(c)
+}
