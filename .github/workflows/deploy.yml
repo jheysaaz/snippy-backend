@@ -127,16 +127,6 @@ jobs:
           target: "/root/snippy-api/"
           overwrite: true
 
-      - name: Copy .env.production file
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USERNAME }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: ".env.production"
-          target: "/root/snippy-api/"
-          overwrite: true
-
       - name: Copy deploy script
         uses: appleboy/scp-action@v0.1.7
         with:
