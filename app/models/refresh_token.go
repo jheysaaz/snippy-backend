@@ -16,8 +16,8 @@ var (
 )
 
 const (
-	// AccessTokenDuration - short-lived access token (30 minutes)
-	AccessTokenDuration = 30 * time.Minute
+	// AccessTokenDuration - short-lived access token (15 minutes)
+	AccessTokenDuration = 15 * time.Minute
 
 	// RefreshTokenDuration - long-lived refresh token (90 days)
 	RefreshTokenDuration = 3 * 30 * 24 * time.Hour

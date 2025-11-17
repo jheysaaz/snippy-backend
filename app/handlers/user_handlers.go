@@ -208,8 +208,7 @@ func deleteUser(c *gin.Context) {
 }
 
 // getUserSnippets retrieves all snippets for a specific user
-func getUserSnippets(c *gin.Context) {
-	id := c.Param("id")
+func getUserSnippets(c *gin.Context, userID string) {
 
 	// Optional query parameters for filtering
 	tag := c.Query("tag")
@@ -222,7 +221,7 @@ func getUserSnippets(c *gin.Context) {
 		FROM snippets
 		WHERE user_id = $1
 	`
-	args := []interface{}{id}
+	args := []interface{}{userID}
 	argPos := 2
 
 	if tag != "" {
