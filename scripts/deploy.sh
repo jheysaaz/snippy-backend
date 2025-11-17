@@ -40,7 +40,7 @@ docker-compose ps || true
 
 # Health check
 echo "🏥 Running health check..."
-if curl -f http://localhost:8080/api/v1/health; then
+if curl -f http://localhost:80/api/v1/health; then
   echo "✅ Deploy successful!"
   echo "🎉 Application is healthy and running"
   exit 0
