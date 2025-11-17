@@ -13,6 +13,9 @@ on:
         options:
           - production
           - staging
+        build_run_id:
+        description: "Run ID for the artifact"
+        required: true
   # Trigger after CI workflow completes successfully on main branch or tags
   workflow_run:
     workflows: ["CI"]
@@ -58,7 +61,7 @@ jobs:
           # If triggered by workflow_run, download from that run
           # If manual, we need to get the latest artifact from main branch
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+          run-id: ${{ github.event.inputs.build_run_id || github.event.workflow_run.id || github.run_id }}
 
       - name: Verify binary
         run: |
