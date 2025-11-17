@@ -46,20 +46,21 @@ jobs:
             echo "should_deploy=false" >> $GITHUB_OUTPUT
             echo "❌ CI did not pass, skipping deploy"
           fi
-
-  # Download the binary artifact from CI workflow
-  download-artifact:
-    name: Download Binary from CI
+  # Deploy to server (single download within this job)
+  deploy:
+    name: Deploy to Server
     runs-on: ubuntu-latest
     needs: check-ci
     if: needs.check-ci.outputs.should_deploy == 'true'
+
     steps:
-      - name: Download artifact from CI workflow
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download binary artifact from CI run
         uses: actions/download-artifact@v4
         with:
           name: snippy-api
-          # If triggered by workflow_run, download from that run
-          # If manual, we need to get the latest artifact from main branch
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.inputs.build_run_id || github.event.workflow_run.id || github.run_id }}
 
@@ -67,28 +68,6 @@ jobs:
         run: |
           ls -lh snippy-api
           file snippy-api
-
-      - name: Re-upload artifact for deploy
-        uses: actions/upload-artifact@v5
-        with:
-          name: snippy-api-deploy
-          path: snippy-api
-          retention-days: 1
-
-  # Deploy to server
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs: download-artifact
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Download binary artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: snippy-api
 
       - name: Stop services before update
         uses: appleboy/ssh-action@v1.0.3
