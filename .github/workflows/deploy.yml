@@ -85,7 +85,7 @@ jobs:
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
-          name: snippy-api-deploy
+          name: snippy-api
 
       - name: Stop services before update
         uses: appleboy/ssh-action@v1.0.3
