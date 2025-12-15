@@ -80,7 +80,7 @@ jobs:
             docker-compose down 2>/dev/null || true
 
       - name: Copy binary to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
@@ -90,7 +90,7 @@ jobs:
           overwrite: true
 
       - name: Copy systemd service file
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
@@ -100,7 +100,7 @@ jobs:
           overwrite: true
 
       - name: Copy docker-compose file
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
@@ -110,7 +110,7 @@ jobs:
           overwrite: true
 
       - name: Copy deploy script
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
