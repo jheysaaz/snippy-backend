@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -333,7 +334,7 @@ func TestGetSingleSnippet(t *testing.T) {
 	}{
 		{
 			name:           "Get existing snippet",
-			snippetID:      "1",
+			snippetID:      fmt.Sprintf("%d", snippetID),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -371,14 +372,17 @@ func TestUpdateSnippet(t *testing.T) {
 	database.DB = testDB
 
 	// Insert test snippet with NEW schema using matching user_id
+	var snippetID int64
 	err := testDB.QueryRow(`
 		INSERT INTO snippets (label, shortcut, content, tags, user_id)
 		VALUES ('Original Label', 'js-orig', 'original code', ARRAY['test'], $1)
 		RETURNING id
-	`, testUserID).Scan(new(int64))
+	`, testUserID).Scan(&snippetID)
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
+
+	snippetIDStr := fmt.Sprintf("%d", snippetID)
 
 	router := gin.New()
 	router.PUT("/api/v1/snippets/:id", auth.Middleware(), UpdateSnippet)
@@ -391,7 +395,7 @@ func TestUpdateSnippet(t *testing.T) {
 	}{
 		{
 			name:      "Update label only",
-			snippetID: "1",
+			snippetID: snippetIDStr,
 			payload: `{
 				"label": "Updated Label"
 			}`,
@@ -399,7 +403,7 @@ func TestUpdateSnippet(t *testing.T) {
 		},
 		{
 			name:      "Update multiple fields",
-			snippetID: "1",
+			snippetID: snippetIDStr,
 			payload: `{
 				"label": "New Label",
 				"content": "new code"
@@ -408,7 +412,7 @@ func TestUpdateSnippet(t *testing.T) {
 		},
 		{
 			name:      "Update non-existent snippet",
-			snippetID: "999",
+			snippetID: "999999",
 			payload: `{
 				"label": "New Label"
 			}`,
@@ -446,11 +450,12 @@ func TestDeleteSnippet(t *testing.T) {
 	database.DB = testDB
 
 	// Insert test snippet with NEW schema using matching user_id
+	var snippetID int64
 	err := testDB.QueryRow(`
 		INSERT INTO snippets (label, shortcut, content, tags, user_id)
 		VALUES ('To Delete', 'go-delete', 'code', ARRAY['test'], $1)
 		RETURNING id
-	`, testUserID).Scan(new(int64))
+	`, testUserID).Scan(&snippetID)
 	if err != nil {
 		t.Fatalf("Failed to insert test snippet: %v", err)
 	}
@@ -465,7 +470,7 @@ func TestDeleteSnippet(t *testing.T) {
 	}{
 		{
 			name:           "Delete existing snippet",
-			snippetID:      "1",
+			snippetID:      fmt.Sprintf("%d", snippetID),
 			expectedStatus: http.StatusOK,
 		},
 		{
