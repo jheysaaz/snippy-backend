@@ -5,83 +5,76 @@ run:
 
 linters:
   enable:
-    - errcheck # Check for unchecked errors
-    - govet # Reports suspicious constructs
-    - ineffassign # Detect ineffectual assignments
-    - staticcheck # Go static analysis
-    - unused # Check for unused constants, variables, functions and types
-    - gosec # Security problems
-    - misspell # Finds commonly misspelled English words
-    - unconvert # Remove unnecessary type conversions
-    - unparam # Reports unused function parameters
-    - bodyclose # Checks whether HTTP response body is closed
-    - noctx # Finds sending http request without context.Context
-    - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
-    - rowserrcheck # Checks whether Err of rows is checked
-    # - exportloopref # Deprecated since Go 1.22 - replaced by copyloopvar
-    - gocritic # Provides diagnostics that check for bugs, performance and style issues
-    - gocyclo # Computes cyclomatic complexity
-    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - misspell
+    - unconvert
+    - unparam
+    - bodyclose
+    - noctx
+    - sqlclosecheck
+    - rowserrcheck
+    - gocritic
+    - gocyclo
+    - revive
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
+    gosec:
+      excludes:
+        - G104
+      severity: medium
+      confidence: medium
+    revive:
+      rules:
+        - name: var-naming
+          severity: warning
+          disabled: false
+        - name: context-as-argument
+          severity: warning
+          disabled: false
+        - name: dot-imports
+          severity: warning
+          disabled: false
+        - name: error-return
+          severity: warning
+          disabled: false
+        - name: error-strings
+          severity: warning
+          disabled: false
+        - name: error-naming
+          severity: warning
+          disabled: false
+        - name: exported
+          severity: warning
+          disabled: false
+        - name: if-return
+          severity: warning
+          disabled: false
+        - name: increment-decrement
+          severity: warning
+          disabled: false
+        - name: receiver-naming
+          severity: warning
+          disabled: false
+        - name: range
+          severity: warning
+          disabled: false
+        - name: time-naming
+          severity: warning
+          disabled: false
 
 formatters:
   enable:
     - gofmt
     - goimports
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  govet:
-    enable-all: true
-
-  gosec:
-    includes: []
-    exclude: []
-    excludes:
-      - G104 # Audit errors not checked - we use errcheck for this
-    severity: "medium"
-    confidence: "medium"
-
-  revive:
-    rules:
-      - name: var-naming
-        severity: warning
-        disabled: false
-      - name: context-as-argument
-        severity: warning
-        disabled: false
-      - name: dot-imports
-        severity: warning
-        disabled: false
-      - name: error-return
-        severity: warning
-        disabled: false
-      - name: error-strings
-        severity: warning
-        disabled: false
-      - name: error-naming
-        severity: warning
-        disabled: false
-      - name: exported
-        severity: warning
-        disabled: false
-      - name: if-return
-        severity: warning
-        disabled: false
-      - name: increment-decrement
-        severity: warning
-        disabled: false
-      - name: receiver-naming
-        severity: warning
-        disabled: false
-      - name: range
-        severity: warning
-        disabled: false
-      - name: time-naming
-        severity: warning
-        disabled: false
 
 issues:
   max-issues-per-linter: 0

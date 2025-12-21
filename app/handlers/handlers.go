@@ -139,8 +139,8 @@ func syncSnippets(c *gin.Context) {
 		return
 	}
 	defer func() {
-		if err := createdRows.Close(); err != nil {
-			log.Printf("error closing created rows: %v", err)
+		if closeErr := createdRows.Close(); closeErr != nil {
+			log.Printf("error closing created rows: %v", closeErr)
 		}
 	}()
 
@@ -172,8 +172,8 @@ func syncSnippets(c *gin.Context) {
 		return
 	}
 	defer func() {
-		if err := updatedRows.Close(); err != nil {
-			log.Printf("error closing updated rows: %v", err)
+		if closeErr := updatedRows.Close(); closeErr != nil {
+			log.Printf("error closing updated rows: %v", closeErr)
 		}
 	}()
 
