@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jheysaaz/snippy-backend/app/models"
 )
 
 // Middleware validates JWT tokens and sets user context
@@ -37,6 +39,17 @@ func Middleware() gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("email", claims.Email)
+
+		// Track session activity if session ID is provided
+		sessionID := c.GetHeader("X-Session-ID")
+		if sessionID != "" {
+			// Update session activity in background to avoid blocking
+			go func() {
+				if err := models.UpdateSessionActivity(sessionID); err != nil {
+					log.Printf("Failed to update session activity for %s: %v", sessionID, err)
+				}
+			}()
+		}
 
 		c.Next()
 	}

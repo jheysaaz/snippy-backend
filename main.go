@@ -104,6 +104,14 @@ func main() {
 			authRoutes.POST("/logout-all", handlers.LogoutAll)
 		}
 
+		// Protected auth routes (require authentication)
+		protectedAuth := api.Group("/auth")
+		protectedAuth.Use(auth.Middleware())
+		{
+			protectedAuth.GET("/sessions", handlers.GetSessions)
+			protectedAuth.POST("/sessions/:sessionId", handlers.LogoutSession)
+		}
+
 		// Protected routes (require authentication)
 		protected := api.Group("")
 		protected.Use(auth.Middleware())
@@ -123,6 +131,7 @@ func main() {
 			snippets := protected.Group("/snippets")
 			{
 				snippets.GET("/", handlers.GetCurrentUserSnippets)
+				snippets.GET("/sync", handlers.SyncSnippets)
 				snippets.POST("/", handlers.CreateSnippet)
 				snippets.GET("/:id", handlers.GetSnippet)
 				snippets.PUT("/:id", handlers.UpdateSnippet)

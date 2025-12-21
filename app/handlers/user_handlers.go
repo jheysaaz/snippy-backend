@@ -470,6 +470,16 @@ func login(c *gin.Context) {
 		return
 	}
 
+	// Get client IP address
+	clientIP := c.ClientIP()
+
+	// Create a session for this login
+	_, err = models.CreateSession(user.ID, deviceInfo, clientIP, c.GetHeader("User-Agent"), "")
+	if err != nil {
+		log.Printf("failed to create session for user %q: %v", user.ID, err)
+		// Don't fail login if session creation fails, just log it
+	}
+
 	// Set refresh token as HTTP-only secure cookie
 	c.SetCookie(
 		"refresh_token", // name
@@ -628,5 +638,73 @@ func logoutAll(c *gin.Context) {
 		return
 	}
 
+	// Logout all sessions for this user
+	if err := models.LogoutAllUserSessions(userID); err != nil {
+		log.Printf("Failed to logout all sessions for user %v: %v", userID, err)
+	}
+
 	respondSuccess(c, http.StatusOK, gin.H{"message": "Logged out from all devices successfully"})
+}
+
+// getSessions retrieves all active sessions for the authenticated user
+// @Summary Get user sessions
+// @Description Get all active sessions for the authenticated user
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /auth/sessions [get]
+func getSessions(c *gin.Context) {
+	userID, exists := getAuthUserID(c)
+	if !exists {
+		return
+	}
+
+	sessions, err := models.GetUserSessions(userID)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to fetch sessions")
+		return
+	}
+
+	respondWithCount(c, sessions, len(sessions))
+}
+
+// logoutSession logs out a specific session
+// @Summary Logout from a session
+// @Description Logout from a specific session
+// @Tags auth
+// @Produce json
+// @Param sessionId path string true "Session ID"
+// @Success 200 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /auth/sessions/{sessionId} [post]
+func logoutSession(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	userID, exists := getAuthUserID(c)
+	if !exists {
+		return
+	}
+
+	// Get the session to verify ownership
+	session, err := models.GetSessionByID(sessionID)
+	if err != nil {
+		respondError(c, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Verify the session belongs to the authenticated user
+	if session.UserID != userID {
+		respondError(c, http.StatusForbidden, "Cannot logout someone else's session")
+		return
+	}
+
+	// Logout the session
+	if err := models.LogoutSession(sessionID); err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to logout session")
+		return
+	}
+
+	respondSuccess(c, http.StatusOK, gin.H{"message": "Session logged out successfully"})
 }

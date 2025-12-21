@@ -14,6 +14,8 @@ var (
 	RefreshAccessToken = refreshAccessToken
 	Logout             = logout
 	LogoutAll          = logoutAll
+	GetSessions        = getSessions
+	LogoutSession      = logoutSession
 )
 
 // User handlers
@@ -28,6 +30,7 @@ var (
 // Snippet handlers
 var (
 	GetSnippets           = getSnippets
+	SyncSnippets          = syncSnippets
 	CreateSnippet         = createSnippet
 	GetSnippet            = getSnippet
 	UpdateSnippet         = updateSnippet

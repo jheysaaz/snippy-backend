@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/jheysaaz/snippy-backend/app/models"
@@ -89,6 +90,133 @@ func getSnippets(c *gin.Context) {
 	}
 
 	respondWithCount(c, snippets, len(snippets))
+}
+
+// syncSnippets returns snippets changed since a given timestamp for the authenticated user
+// @Summary Sync snippets since timestamp
+// @Description Returns snippets added/updated and deleted since the given timestamp
+// @Tags snippets
+// @Produce json
+// @Param updated_since query string true "RFC3339 timestamp"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets/sync [get]
+func syncSnippets(c *gin.Context) {
+	updatedSinceStr := c.Query("updated_since")
+	if updatedSinceStr == "" {
+		respondError(c, http.StatusBadRequest, "updated_since query param is required")
+		return
+	}
+
+	updatedSince, err := time.Parse(time.RFC3339, updatedSinceStr)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "updated_since must be RFC3339 format")
+		return
+	}
+
+	userID, exists := getAuthUserID(c)
+	if !exists {
+		return
+	}
+
+	// Fetch created snippets since the timestamp
+	queryCreated := `
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		FROM snippets
+		WHERE user_id = $1 AND is_deleted = false AND created_at > $2
+		ORDER BY created_at ASC
+	`
+
+	createdRows, err := database.DB.Query(queryCreated, userID, updatedSince)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to fetch created snippets")
+		return
+	}
+	defer createdRows.Close()
+
+	created := make([]models.Snippet, 0, 10)
+	for createdRows.Next() {
+		snippet, scanErr := models.ScanSnippet(createdRows)
+		if scanErr != nil {
+			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
+			return
+		}
+		created = append(created, *snippet)
+	}
+	if err := createdRows.Err(); err != nil {
+		respondError(c, http.StatusInternalServerError, "Error iterating created snippets")
+		return
+	}
+
+	// Fetch updated snippets (exclude those newly created to avoid duplicates)
+	queryUpdated := `
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		FROM snippets
+		WHERE user_id = $1 AND is_deleted = false AND updated_at > $2 AND created_at <= $2
+		ORDER BY updated_at ASC
+	`
+
+	updatedRows, err := database.DB.Query(queryUpdated, userID, updatedSince)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to fetch updated snippets")
+		return
+	}
+	defer updatedRows.Close()
+
+	updated := make([]models.Snippet, 0, 10)
+	for updatedRows.Next() {
+		snippet, scanErr := models.ScanSnippet(updatedRows)
+		if scanErr != nil {
+			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
+			return
+		}
+		updated = append(updated, *snippet)
+	}
+	if err := updatedRows.Err(); err != nil {
+		respondError(c, http.StatusInternalServerError, "Error iterating updated snippets")
+		return
+	}
+
+	// Fetch deletions
+	queryDeleted := `
+		SELECT id, deleted_at
+		FROM snippets
+		WHERE user_id = $1 AND is_deleted = true AND deleted_at IS NOT NULL AND deleted_at > $2
+		ORDER BY deleted_at ASC
+	`
+
+	deletedRows, err := database.DB.Query(queryDeleted, userID, updatedSince)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "Failed to fetch deleted snippets")
+		return
+	}
+	defer deletedRows.Close()
+
+	type deletedSnippet struct {
+		ID        int64      `json:"id"`
+		DeletedAt *time.Time `json:"deletedAt"`
+	}
+
+	deleted := make([]deletedSnippet, 0, 10)
+	for deletedRows.Next() {
+		var item deletedSnippet
+		if scanErr := deletedRows.Scan(&item.ID, &item.DeletedAt); scanErr != nil {
+			respondError(c, http.StatusInternalServerError, "Failed to scan deleted snippet")
+			return
+		}
+		deleted = append(deleted, item)
+	}
+	if err := deletedRows.Err(); err != nil {
+		respondError(c, http.StatusInternalServerError, "Error iterating deleted snippets")
+		return
+	}
+
+	respondSuccess(c, http.StatusOK, gin.H{
+		"created": created,
+		"updated": updated,
+		"deleted": deleted,
+	})
 }
 
 // getSnippet retrieves a single snippet by ID

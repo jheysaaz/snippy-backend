@@ -10,6 +10,7 @@ type RetentionPolicy struct {
 	SnippetVersionDays     int // Keep snippet versions for this many days
 	SoftDeletedSnippetDays int // Keep soft-deleted snippets for this many days
 	SoftDeletedUserDays    int // Keep soft-deleted users for this many days
+	IdleSessionDays        int // Auto-logout sessions idle for this many days
 }
 
 // DefaultRetentionPolicy returns the default retention policy
@@ -18,6 +19,7 @@ func DefaultRetentionPolicy() *RetentionPolicy {
 		SnippetVersionDays:     60, // 60 days for snippet versions
 		SoftDeletedSnippetDays: 90, // 90 days for soft-deleted snippets
 		SoftDeletedUserDays:    30, // 30 days for soft-deleted users
+		IdleSessionDays:        7,  // 7 days of inactivity before auto-logout
 	}
 }
 
@@ -32,9 +34,24 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	snippetCutoff := time.Now().AddDate(0, 0, -policy.SoftDeletedSnippetDays)
 	userCutoff := time.Now().AddDate(0, 0, -policy.SoftDeletedUserDays)
 
-	// 1. Delete old snippet versions (older than 30 days)
-	log.Printf("Deleting snippet versions older than %v", versionCutoff)
+	// 0. Auto-logout idle sessions
+	log.Printf("Logging out sessions idle for more than %d days", policy.IdleSessionDays)
 	result, err := DB.Exec(`
+		UPDATE sessions 
+		SET active = false, logged_out_at = NOW()
+		WHERE active = true AND last_activity < NOW() - INTERVAL '%d days'
+	`, policy.IdleSessionDays)
+	if err != nil {
+		log.Printf("Error logging out idle sessions: %v", err)
+		// Don't return error, continue with other cleanup
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		log.Printf("Logged out %d idle sessions", rowsAffected)
+	}
+
+	// 1. Delete old snippet versions (older than 60 days)
+	log.Printf("Deleting snippet versions older than %v", versionCutoff)
+	result, err = DB.Exec(`
 		DELETE FROM snippet_history
 		WHERE changed_at < $1
 	`, versionCutoff)

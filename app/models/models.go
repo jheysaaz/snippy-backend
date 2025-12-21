@@ -201,3 +201,18 @@ func ScanUserForAuth(scanner interface {
 
 	return &user, nil
 }
+
+// Session represents a user session
+type Session struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"userId"`
+	DeviceInfo     *string    `json:"deviceInfo,omitempty"`
+	IPAddressHash  *string    `json:"-"` // Hash of IP, not exposed in API
+	UserAgent      *string    `json:"userAgent,omitempty"`
+	RefreshTokenID *string    `json:"refreshTokenId,omitempty"`
+	Active         bool       `json:"active"`
+	LastActivity   time.Time  `json:"lastActivity"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
+	LoggedOutAt    *time.Time `json:"loggedOutAt,omitempty"`
+}
