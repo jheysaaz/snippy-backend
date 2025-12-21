@@ -67,8 +67,6 @@ definitions:
       expiresIn:
         description: Access token expiration in seconds
         type: integer
-      refreshToken:
-        type: string
       user:
         $ref: '#/definitions/models.User'
     type: object
@@ -76,8 +74,6 @@ definitions:
     properties:
       refreshToken:
         type: string
-    required:
-    - refreshToken
     type: object
   models.RefreshTokenResponse:
     properties:
@@ -110,6 +106,9 @@ definitions:
     type: object
   models.UpdateSnippetRequest:
     properties:
+      changeNotes:
+        description: Optional description of the change
+        type: string
       content:
         type: string
       label:
@@ -533,6 +532,92 @@ paths:
       security:
       - BearerAuth: []
       summary: Update a snippet
+      tags:
+      - snippets
+  /snippets/{id}/history:
+    get:
+      description: Get all versions of a snippet (owner only)
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get snippet history
+      tags:
+      - snippets
+  /snippets/{id}/restore/{versionNumber}:
+    post:
+      consumes:
+      - application/json
+      description: Restore a snippet to a specific version (owner only)
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Version Number
+        in: path
+        name: versionNumber
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Snippet'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restore snippet version
       tags:
       - snippets
   /users:

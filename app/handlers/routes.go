@@ -27,12 +27,14 @@ var (
 
 // Snippet handlers
 var (
-	GetSnippets     = getSnippets
-	CreateSnippet   = createSnippet
-	GetSnippet      = getSnippet
-	UpdateSnippet   = updateSnippet
-	DeleteSnippet   = deleteSnippet
-	GetUserSnippets = getUserSnippets
+	GetSnippets           = getSnippets
+	CreateSnippet         = createSnippet
+	GetSnippet            = getSnippet
+	UpdateSnippet         = updateSnippet
+	DeleteSnippet         = deleteSnippet
+	GetUserSnippets       = getUserSnippets
+	GetSnippetHistory     = getSnippetHistory
+	RestoreSnippetVersion = restoreSnippetVersion
 )
 
 // GetCurrentUser returns the currently authenticated user

@@ -592,6 +592,139 @@ const docTemplate = `{
                 }
             }
         },
+        "/snippets/{id}/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all versions of a snippet (owner only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Get snippet history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/snippets/{id}/restore/{versionNumber}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restore a snippet to a specific version (owner only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Restore snippet version",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Version Number",
+                        "name": "versionNumber",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Snippet"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [
@@ -967,9 +1100,6 @@ const docTemplate = `{
                     "description": "Access token expiration in seconds",
                     "type": "integer"
                 },
-                "refreshToken": {
-                    "type": "string"
-                },
                 "user": {
                     "$ref": "#/definitions/models.User"
                 }
@@ -977,9 +1107,6 @@ const docTemplate = `{
         },
         "models.RefreshTokenRequest": {
             "type": "object",
-            "required": [
-                "refreshToken"
-            ],
             "properties": {
                 "refreshToken": {
                     "type": "string"
@@ -1033,6 +1160,10 @@ const docTemplate = `{
         "models.UpdateSnippetRequest": {
             "type": "object",
             "properties": {
+                "changeNotes": {
+                    "description": "Optional description of the change",
+                    "type": "string"
+                },
                 "content": {
                     "type": "string"
                 },

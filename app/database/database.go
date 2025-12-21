@@ -119,6 +119,78 @@ func initDatabase() error {
 		to_tsvector('english', coalesce(label, ''))
 	);
 
+	-- Create snippet_history table for version tracking
+	CREATE TABLE IF NOT EXISTS snippet_history (
+		id SERIAL PRIMARY KEY,
+		snippet_id INTEGER NOT NULL REFERENCES snippets(id) ON DELETE CASCADE,
+		version_number INTEGER NOT NULL,
+		label VARCHAR(255) NOT NULL,
+		shortcut VARCHAR(50) NOT NULL,
+		content TEXT NOT NULL,
+		tags TEXT[],
+		changed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		change_type VARCHAR(20) NOT NULL CHECK (change_type IN ('create', 'edit', 'restore', 'soft_delete')),
+		changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		change_notes TEXT,
+		UNIQUE(snippet_id, version_number)
+	);
+
+	-- Create indexes for snippet_history
+	CREATE INDEX IF NOT EXISTS idx_snippet_history_snippet_id ON snippet_history(snippet_id);
+	CREATE INDEX IF NOT EXISTS idx_snippet_history_changed_at ON snippet_history(changed_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_snippet_history_changed_by ON snippet_history(changed_by);
+	CREATE INDEX IF NOT EXISTS idx_snippet_history_change_type ON snippet_history(change_type);
+
+	-- Function to get next version number for a snippet
+	CREATE OR REPLACE FUNCTION get_next_snippet_version(p_snippet_id INTEGER)
+	RETURNS INTEGER AS $$
+	DECLARE
+		next_version INTEGER;
+	BEGIN
+		SELECT COALESCE(MAX(version_number), 0) + 1
+		INTO next_version
+		FROM snippet_history
+		WHERE snippet_id = p_snippet_id;
+		
+		RETURN next_version;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	-- Trigger to automatically create history entry when snippet is created
+	CREATE OR REPLACE FUNCTION trigger_snippet_history_on_insert()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO snippet_history (
+			snippet_id,
+			version_number,
+			label,
+			shortcut,
+			content,
+			tags,
+			changed_by,
+			change_type,
+			change_notes
+		) VALUES (
+			NEW.id,
+			1,
+			NEW.label,
+			NEW.shortcut,
+			NEW.content,
+			NEW.tags,
+			NEW.user_id,
+			'create',
+			'Initial version'
+		);
+		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trigger_snippet_history_on_insert ON snippets;
+	CREATE TRIGGER trigger_snippet_history_on_insert
+		AFTER INSERT ON snippets
+		FOR EACH ROW
+		EXECUTE FUNCTION trigger_snippet_history_on_insert();
+
 	-- Create trigger to automatically update updated_at
 	CREATE OR REPLACE FUNCTION update_updated_at_column()
 	RETURNS TRIGGER AS $$

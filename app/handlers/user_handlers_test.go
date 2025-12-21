@@ -122,8 +122,28 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 					t.Error("Expected access token, got empty string")
 				}
 
-				if response.RefreshToken == "" {
-					t.Error("Expected refresh token, got empty string")
+				// Check that refresh token is in cookie, not in response body
+				cookies := w.Result().Cookies()
+				var refreshTokenCookie *http.Cookie
+				for _, cookie := range cookies {
+					if cookie.Name == "refresh_token" {
+						refreshTokenCookie = cookie
+						break
+					}
+				}
+
+				if refreshTokenCookie == nil {
+					t.Error("Expected refresh_token cookie, but not found")
+				} else {
+					if refreshTokenCookie.Value == "" {
+						t.Error("Expected refresh_token cookie to have a value")
+					}
+					if !refreshTokenCookie.HttpOnly {
+						t.Error("Expected refresh_token cookie to be HttpOnly")
+					}
+					if refreshTokenCookie.MaxAge <= 0 {
+						t.Errorf("Expected refresh_token cookie to have positive MaxAge, got %d", refreshTokenCookie.MaxAge)
+					}
 				}
 
 				if response.User == nil {
@@ -171,36 +191,36 @@ func TestCheckAvailability(t *testing.T) {
 	router.GET("/api/v1/auth/availability", CheckAvailability)
 
 	tests := []struct {
-		name               string
-		username           string
-		email              string
-		expectedStatus     int
-		usernameAvailable  *bool
-		emailAvailable     *bool
+		name              string
+		username          string
+		email             string
+		expectedStatus    int
+		usernameAvailable *bool
+		emailAvailable    *bool
 	}{
 		{
-			name:               "both available",
-			username:           "newuser",
-			email:              "new@example.com",
-			expectedStatus:     http.StatusOK,
-			usernameAvailable:  boolPtr(true),
-			emailAvailable:     boolPtr(true),
+			name:              "both available",
+			username:          "newuser",
+			email:             "new@example.com",
+			expectedStatus:    http.StatusOK,
+			usernameAvailable: boolPtr(true),
+			emailAvailable:    boolPtr(true),
 		},
 		{
-			name:               "username taken",
-			username:           "existinguser",
-			email:              "new@example.com",
-			expectedStatus:     http.StatusOK,
-			usernameAvailable:  boolPtr(false),
-			emailAvailable:     boolPtr(true),
+			name:              "username taken",
+			username:          "existinguser",
+			email:             "new@example.com",
+			expectedStatus:    http.StatusOK,
+			usernameAvailable: boolPtr(false),
+			emailAvailable:    boolPtr(true),
 		},
 		{
-			name:               "email taken",
-			username:           "newuser",
-			email:              "existing@example.com",
-			expectedStatus:     http.StatusOK,
-			usernameAvailable:  boolPtr(true),
-			emailAvailable:     boolPtr(false),
+			name:              "email taken",
+			username:          "newuser",
+			email:             "existing@example.com",
+			expectedStatus:    http.StatusOK,
+			usernameAvailable: boolPtr(true),
+			emailAvailable:    boolPtr(false),
 		},
 		{
 			name:           "no parameters",

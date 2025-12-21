@@ -32,11 +32,27 @@ type CreateSnippetRequest struct {
 
 // UpdateSnippetRequest for updating an existing snippet
 type UpdateSnippetRequest struct {
-	Label    *string  `json:"label,omitempty"`
-	Shortcut *string  `json:"shortcut,omitempty"`
-	Content  *string  `json:"content,omitempty"`
-	UserID   *string  `json:"userId,omitempty"` // UUID as string
-	Tags     []string `json:"tags,omitempty"`
+	Label       *string  `json:"label,omitempty"`
+	Shortcut    *string  `json:"shortcut,omitempty"`
+	Content     *string  `json:"content,omitempty"`
+	UserID      *string  `json:"userId,omitempty"` // UUID as string
+	Tags        []string `json:"tags,omitempty"`
+	ChangeNotes *string  `json:"changeNotes,omitempty"` // Optional description of the change
+}
+
+// SnippetHistory represents a version in snippet history
+type SnippetHistory struct {
+	ID            int64     `json:"id"`
+	SnippetID     int64     `json:"snippetId"`
+	VersionNumber int       `json:"versionNumber"`
+	Label         string    `json:"label"`
+	Shortcut      string    `json:"shortcut"`
+	Content       string    `json:"content"`
+	Tags          []string  `json:"tags"`
+	ChangedBy     string    `json:"changedBy"`
+	ChangeType    string    `json:"changeType"`
+	ChangedAt     time.Time `json:"changedAt"`
+	ChangeNotes   *string   `json:"changeNotes,omitempty"`
 }
 
 // scanSnippet scans a database row into a Snippet struct
@@ -101,15 +117,16 @@ type LoginRequest struct {
 
 // LoginResponse returned after successful login
 type LoginResponse struct {
-	User         *User  `json:"user"`
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	ExpiresIn    int64  `json:"expiresIn"` // Access token expiration in seconds
+	User        *User  `json:"user"`
+	AccessToken string `json:"accessToken"`
+	ExpiresIn   int64  `json:"expiresIn"` // Access token expiration in seconds
+	// RefreshToken is now sent as an HTTP-only cookie for security
 }
 
 // RefreshTokenRequest for refreshing access token
+// RefreshToken is optional because it can come from cookie
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refreshToken" binding:"required"`
+	RefreshToken string `json:"refreshToken,omitempty"`
 }
 
 // RefreshTokenResponse returned after refreshing token

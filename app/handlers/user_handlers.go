@@ -236,6 +236,12 @@ func deleteUser(c *gin.Context) {
 		return
 	}
 
+	// Revoke all refresh tokens for the user (logout from all devices)
+	if err := models.RevokeAllUserTokens(id); err != nil {
+		log.Printf("Failed to revoke all tokens for user %s: %v", id, err)
+		// Don't return error, continue with user deletion
+	}
+
 	query := `UPDATE users SET is_deleted = true, deleted_at = NOW() WHERE id = $1 AND is_deleted = false`
 
 	result, err := database.DB.Exec(query, id)
@@ -464,12 +470,22 @@ func login(c *gin.Context) {
 		return
 	}
 
-	// Return user info and both tokens
+	// Set refresh token as HTTP-only secure cookie
+	c.SetCookie(
+		"refresh_token", // name
+		refreshToken,    // value
+		int(models.RefreshTokenDuration.Seconds()), // maxAge in seconds
+		"/",                             // path
+		"",                              // domain (empty = current domain)
+		c.Request.URL.Scheme == "https", // secure (true for HTTPS)
+		true,                            // httpOnly
+	)
+
+	// Return user info and access token only (refresh token in cookie)
 	response := models.LoginResponse{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(models.AccessTokenDuration.Seconds()),
+		User:        user,
+		AccessToken: accessToken,
+		ExpiresIn:   int64(models.AccessTokenDuration.Seconds()),
 	}
 
 	respondSuccess(c, http.StatusOK, response)
@@ -487,14 +503,20 @@ func login(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /auth/refresh [post]
 func refreshAccessToken(c *gin.Context) {
-	var req models.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Try to get refresh token from cookie first, then from request body
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil {
+		// Cookie not found, try to get from request body
+		var req models.RefreshTokenRequest
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil || req.RefreshToken == "" {
+			respondError(c, http.StatusBadRequest, "Refresh token required in cookie or body")
+			return
+		}
+		refreshToken = req.RefreshToken
 	}
 
 	// Validate refresh token
-	rt, err := models.ValidateRefreshToken(req.RefreshToken)
+	rt, err := models.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		switch err {
 		case models.ErrTokenExpired:
@@ -552,17 +574,34 @@ func refreshAccessToken(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Router /auth/logout [post]
 func logout(c *gin.Context) {
-	var req models.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Try to get refresh token from cookie first, then from request body
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil {
+		// Cookie not found, try to get from request body
+		var req models.RefreshTokenRequest
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil || req.RefreshToken == "" {
+			respondError(c, http.StatusBadRequest, "Refresh token required in cookie or body")
+			return
+		}
+		refreshToken = req.RefreshToken
 	}
 
 	// Revoke the refresh token
-	if err := models.RevokeRefreshToken(req.RefreshToken); err != nil {
+	if err := models.RevokeRefreshToken(refreshToken); err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to logout")
 		return
 	}
+
+	// Clear the refresh token cookie
+	c.SetCookie(
+		"refresh_token",
+		"",
+		-1, // maxAge -1 deletes the cookie
+		"/",
+		"",
+		c.Request.URL.Scheme == "https",
+		true,
+	)
 
 	respondSuccess(c, http.StatusOK, gin.H{"message": "Logged out successfully"})
 }

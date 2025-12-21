@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
@@ -29,6 +30,9 @@ func main() {
 	if err := database.Init(); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
+
+	// Start data retention cleanup job (runs every 24 hours)
+	go startDataRetentionCleanup()
 
 	// Start token cleanup job (optional background task)
 	// go models.StartTokenCleanupJob()
@@ -123,6 +127,8 @@ func main() {
 				snippets.GET("/:id", handlers.GetSnippet)
 				snippets.PUT("/:id", handlers.UpdateSnippet)
 				snippets.DELETE("/:id", handlers.DeleteSnippet)
+				snippets.GET("/:id/history", handlers.GetSnippetHistory)
+				snippets.POST("/:id/restore/:versionNumber", handlers.RestoreSnippetVersion)
 			}
 		}
 	}
@@ -137,5 +143,25 @@ func main() {
 	if err := r.Run(":" + port); err != nil {
 		log.Printf("Failed to start server: %v", err)
 		return
+	}
+}
+
+// startDataRetentionCleanup runs the data retention cleanup job every 24 hours
+func startDataRetentionCleanup() {
+	// Run cleanup immediately on startup
+	policy := database.DefaultRetentionPolicy()
+	if err := database.CleanupOldData(policy); err != nil {
+		log.Printf("Initial data cleanup failed: %v", err)
+	}
+
+	// Schedule cleanup to run every 24 hours
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		log.Println("Running scheduled data retention cleanup...")
+		if err := database.CleanupOldData(policy); err != nil {
+			log.Printf("Scheduled data cleanup failed: %v", err)
+		}
 	}
 }
