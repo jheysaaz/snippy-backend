@@ -610,8 +610,8 @@ func refreshAccessToken(c *gin.Context) {
 	}
 
 	// Rotate refresh token: revoke old and issue a new one for same session
-	if err := models.RevokeRefreshToken(c.Request.Context(), refreshToken); err != nil {
-		log.Printf("failed to revoke used refresh token: %v", err)
+	if revokeErr := models.RevokeRefreshToken(c.Request.Context(), refreshToken); revokeErr != nil {
+		log.Printf("failed to revoke used refresh token: %v", revokeErr)
 		// continue; not fatal for issuing access token
 	}
 
@@ -619,7 +619,9 @@ func refreshAccessToken(c *gin.Context) {
 	if err == nil {
 		// Store new refresh token for the same session
 		if rt.SessionID != "" {
-			_ = models.StoreRefreshToken(c.Request.Context(), rt.SessionID, newRefreshToken)
+			if storeErr := models.StoreRefreshToken(c.Request.Context(), rt.SessionID, newRefreshToken); storeErr != nil {
+				log.Printf("failed to store new refresh token: %v", storeErr)
+			}
 		}
 		// Update cookie
 		c.SetCookie(

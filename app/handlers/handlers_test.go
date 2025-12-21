@@ -67,8 +67,11 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Skip("Skipping integration tests: Cannot connect to PostgreSQL")
 	}
 
-	// Clean up test data
+	// Clean up test data - drop in reverse dependency order
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippet_history")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS sessions")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 
 	// Initialize schema with NEW structure (label, shortcut, content)
@@ -88,6 +91,28 @@ func setupTestDB(t *testing.T) *sql.DB {
 		deleted_at TIMESTAMP WITH TIME ZONE
 	);
 
+	CREATE TABLE IF NOT EXISTS sessions (
+		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		device_info TEXT,
+		ip_address_hash TEXT,
+		user_agent TEXT,
+		active BOOLEAN DEFAULT true,
+		last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		expires_at TIMESTAMP WITH TIME ZONE,
+		logged_out_at TIMESTAMP WITH TIME ZONE
+	);
+
+	CREATE TABLE IF NOT EXISTS refresh_tokens (
+		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+		token TEXT NOT NULL UNIQUE,
+		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		revoked BOOLEAN DEFAULT FALSE
+	);
+
 	CREATE TABLE IF NOT EXISTS snippets (
 		id SERIAL PRIMARY KEY,
 		label VARCHAR(255) NOT NULL,
@@ -101,14 +126,19 @@ func setupTestDB(t *testing.T) *sql.DB {
 		deleted_at TIMESTAMP WITH TIME ZONE
 	);
 
-	CREATE TABLE IF NOT EXISTS refresh_tokens (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		token TEXT NOT NULL UNIQUE,
-		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-		revoked BOOLEAN DEFAULT FALSE,
-		device_info TEXT
+	CREATE TABLE IF NOT EXISTS snippet_history (
+		id SERIAL PRIMARY KEY,
+		snippet_id INTEGER NOT NULL REFERENCES snippets(id) ON DELETE CASCADE,
+		version_number INTEGER NOT NULL,
+		label VARCHAR(255) NOT NULL,
+		shortcut VARCHAR(50) NOT NULL,
+		content TEXT NOT NULL,
+		tags TEXT[],
+		changed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		change_type VARCHAR(20) NOT NULL CHECK (change_type IN ('create', 'edit', 'restore', 'soft_delete')),
+		changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		change_notes TEXT,
+		UNIQUE(snippet_id, version_number)
 	);
 	`
 	if _, execErr := testDB.Exec(schema); execErr != nil {
@@ -130,7 +160,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	return testDB
 } // Clean up test database
 func cleanupTestDB(_ *testing.T, testDB *sql.DB) {
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippet_history")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS sessions")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	testDB.Close()
 }

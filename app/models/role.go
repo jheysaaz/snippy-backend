@@ -12,19 +12,19 @@ import (
 
 // Role represents a user role for authorization
 type Role struct {
-	ID          int       `json:"id"`
+	CreatedAt   time.Time `json:"createdAt"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID          int       `json:"id"`
 }
 
 // UserRole represents the assignment of a role to a user
 type UserRole struct {
-	UserID     string    `json:"userId"`
-	RoleID     int       `json:"roleId"`
-	RoleName   string    `json:"roleName"`
 	AssignedAt time.Time `json:"assignedAt"`
 	AssignedBy *string   `json:"assignedBy,omitempty"`
+	UserID     string    `json:"userId"`
+	RoleName   string    `json:"roleName"`
+	RoleID     int       `json:"roleId"`
 }
 
 // Predefined role names

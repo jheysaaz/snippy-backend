@@ -46,10 +46,14 @@ func TestInitDatabase(t *testing.T) {
 		t.Skip("Skipping database tests: Cannot connect to PostgreSQL")
 	}
 
-	// Clean up
+	// Clean up - drop in reverse dependency order
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS user_roles")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS roles")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippet_history")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS snippets")
-	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 	_, _ = testDB.Exec("DROP TABLE IF EXISTS refresh_tokens")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS sessions")
+	_, _ = testDB.Exec("DROP TABLE IF EXISTS users")
 
 	// Set DATABASE_URL for database.Init()
 	os.Setenv("DATABASE_URL", dbURL)

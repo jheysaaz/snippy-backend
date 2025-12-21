@@ -138,13 +138,13 @@ type RefreshTokenResponse struct {
 
 // RefreshToken database model
 type RefreshToken struct {
-	ID        string    `json:"id"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	CreatedAt time.Time `json:"createdAt"`
+	ID        string    `json:"id"`
 	Token     string    `json:"token"`
-	Revoked   bool      `json:"revoked"`
 	SessionID string    `json:"sessionId"`
 	UserID    string    `json:"userId"` // derived via session join
+	Revoked   bool      `json:"revoked"`
 }
 
 // UpdateUserRequest for updating an existing user

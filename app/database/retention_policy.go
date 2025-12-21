@@ -58,12 +58,12 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	}
 
 	// 0.1 Cleanup expired and old revoked refresh tokens
-	if _, err := DB.ExecContext(ctx, `
+	if _, cleanupErr := DB.ExecContext(ctx, `
 		DELETE FROM refresh_tokens
 		WHERE (expires_at < NOW() - INTERVAL '7 days')
 		   OR (revoked = TRUE AND created_at < NOW() - INTERVAL '7 days')
-	`); err != nil {
-		log.Printf("Error cleaning up expired/revoked refresh tokens: %v", err)
+	`); cleanupErr != nil {
+		log.Printf("Error cleaning up expired/revoked refresh tokens: %v", cleanupErr)
 	}
 
 	// 1. Delete old snippet versions (older than 60 days)
@@ -134,8 +134,9 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error batch deleting sessions for expired users: %v", err)
 		// Continue with user deletion anyway
 	} else {
-		sessionsDeleted, _ := result.RowsAffected()
-		log.Printf("Batch deleted %d sessions for expired users", sessionsDeleted)
+		if sessionsDeleted, rowErr := result.RowsAffected(); rowErr == nil {
+			log.Printf("Batch deleted %d sessions for expired users", sessionsDeleted)
+		}
 	}
 
 	// Delete user roles
@@ -146,8 +147,9 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	if err != nil {
 		log.Printf("Error batch deleting user_roles for expired users: %v", err)
 	} else {
-		rolesDeleted, _ := result.RowsAffected()
-		log.Printf("Batch deleted %d user_roles for expired users", rolesDeleted)
+		if rolesDeleted, rowErr := result.RowsAffected(); rowErr == nil {
+			log.Printf("Batch deleted %d user_roles for expired users", rolesDeleted)
+		}
 	}
 
 	// Now delete users (CASCADE will handle snippets -> snippet_history)
@@ -158,8 +160,9 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error batch deleting expired users: %v", err)
 		return err
 	}
-	usersDeleted, _ := result.RowsAffected()
-	log.Printf("Batch deleted %d expired soft-deleted users (with cascaded data)", usersDeleted)
+	if usersDeleted, rowErr := result.RowsAffected(); rowErr == nil {
+		log.Printf("Batch deleted %d expired soft-deleted users (with cascaded data)", usersDeleted)
+	}
 
 	log.Println("Data cleanup completed successfully")
 	return nil
