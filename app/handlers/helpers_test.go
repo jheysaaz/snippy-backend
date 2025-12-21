@@ -63,14 +63,14 @@ func TestRespondWithCount(t *testing.T) {
 
 func TestHandleScanError(t *testing.T) {
 	tests := []struct {
-		name           string
 		err            error
+		name           string
 		expectedStatus int
 		shouldHandle   bool
 	}{
-		{"no rows error", sql.ErrNoRows, http.StatusNotFound, true},
-		{"generic error", errors.New("db error"), http.StatusInternalServerError, true},
-		{"no error", nil, 0, false},
+		{sql.ErrNoRows, "no rows error", http.StatusNotFound, true},
+		{errors.New("db error"), "generic error", http.StatusInternalServerError, true},
+		{nil, "no error", 0, false},
 	}
 
 	for _, tt := range tests {
@@ -123,13 +123,13 @@ func TestCheckOwnership(t *testing.T) {
 
 func TestValueOrNilString(t *testing.T) {
 	tests := []struct {
-		name     string
 		input    *string
 		expected interface{}
+		name     string
 	}{
-		{"nil pointer", nil, nil},
-		{"empty string", strPtr(""), ""},
-		{"non-empty string", strPtr("test"), "test"},
+		{nil, nil, "nil pointer"},
+		{strPtr(""), "", "empty string"},
+		{strPtr("test"), "test", "non-empty string"},
 	}
 
 	for _, tt := range tests {
@@ -168,15 +168,15 @@ func TestArrayOrNilStringSlice(t *testing.T) {
 
 func TestHandleUserUniqueViolation(t *testing.T) {
 	tests := []struct {
-		name         string
 		err          error
+		name         string
 		shouldHandle bool
 		skipNil      bool
 	}{
-		{"duplicate username", errors.New("duplicate key value violates unique constraint \"users_username_key\""), true, false},
-		{"duplicate email", errors.New("duplicate key value violates unique constraint \"users_email_key\""), true, false},
-		{"generic error", errors.New("generic database error"), false, false},
-		{"no error", nil, false, true},
+		{errors.New("duplicate key value violates unique constraint \"users_username_key\""), "duplicate username", true, false},
+		{errors.New("duplicate key value violates unique constraint \"users_email_key\""), "duplicate email", true, false},
+		{errors.New("generic database error"), "generic error", false, false},
+		{nil, "no error", false, true},
 	}
 
 	for _, tt := range tests {

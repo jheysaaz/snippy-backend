@@ -45,8 +45,12 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error logging out idle sessions: %v", err)
 		// Don't return error, continue with other cleanup
 	} else {
-		rowsAffected, _ := result.RowsAffected()
-		log.Printf("Logged out %d idle sessions", rowsAffected)
+		rowsAffected, errRows := result.RowsAffected()
+		if errRows != nil {
+			log.Printf("Error getting rows affected: %v", errRows)
+		} else {
+			log.Printf("Logged out %d idle sessions", rowsAffected)
+		}
 	}
 
 	// 1. Delete old snippet versions (older than 60 days)
@@ -59,8 +63,12 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error deleting old snippet versions: %v", err)
 		return err
 	}
-	rowsAffected, _ := result.RowsAffected()
-	log.Printf("Deleted %d old snippet versions", rowsAffected)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+	} else {
+		log.Printf("Deleted %d old snippet versions", rowsAffected)
+	}
 
 	// 2. Permanently delete soft-deleted snippets and their history (older than 90 days)
 	log.Printf("Deleting soft-deleted snippets older than %v", snippetCutoff)
@@ -76,7 +84,11 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error deleting snippet history for old soft-deleted snippets: %v", err)
 		return err
 	}
-	historyDeleted, _ := result.RowsAffected()
+	historyDeleted, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected for history: %v", err)
+		historyDeleted = 0
+	}
 
 	// Then delete the snippets
 	result, err = DB.Exec(`
@@ -87,8 +99,12 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Error deleting old soft-deleted snippets: %v", err)
 		return err
 	}
-	snippetsDeleted, _ := result.RowsAffected()
-	log.Printf("Deleted %d old soft-deleted snippets and %d associated history entries", snippetsDeleted, historyDeleted)
+	snippetsDeleted, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+	} else {
+		log.Printf("Deleted %d old soft-deleted snippets and %d associated history entries", snippetsDeleted, historyDeleted)
+	}
 
 	// 3. Permanently delete soft-deleted users and all their associated data (older than 60 days)
 	log.Printf("Deleting soft-deleted users older than %v", userCutoff)
@@ -113,6 +129,11 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		userIDs = append(userIDs, userID)
 	}
 
+	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating user rows: %v", err)
+		return err
+	}
+
 	if len(userIDs) > 0 {
 		// Delete snippets and history first (cascade)
 		for _, userID := range userIDs {
@@ -127,7 +148,10 @@ func CleanupOldData(policy *RetentionPolicy) error {
 				log.Printf("Error deleting snippet history for user %s: %v", userID, err)
 				continue
 			}
-			historyDeleted, _ := result.RowsAffected()
+			historyDeleted, errH := result.RowsAffected()
+			if errH != nil {
+				historyDeleted = 0
+			}
 
 			// Delete snippets
 			result, err = DB.Exec(`DELETE FROM snippets WHERE user_id = $1`, userID)
@@ -135,7 +159,10 @@ func CleanupOldData(policy *RetentionPolicy) error {
 				log.Printf("Error deleting snippets for user %s: %v", userID, err)
 				continue
 			}
-			snippetsDeleted, _ := result.RowsAffected()
+			snippetsDeleted, errS := result.RowsAffected()
+			if errS != nil {
+				snippetsDeleted = 0
+			}
 
 			// Delete refresh tokens
 			result, err = DB.Exec(`DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
@@ -143,10 +170,13 @@ func CleanupOldData(policy *RetentionPolicy) error {
 				log.Printf("Error deleting refresh tokens for user %s: %v", userID, err)
 				continue
 			}
-			tokensDeleted, _ := result.RowsAffected()
+			tokensDeleted, errT := result.RowsAffected()
+			if errT != nil {
+				tokensDeleted = 0
+			}
 
 			// Delete user
-			result, err = DB.Exec(`DELETE FROM users WHERE id = $1`, userID)
+			_, err = DB.Exec(`DELETE FROM users WHERE id = $1`, userID)
 			if err != nil {
 				log.Printf("Error deleting user %s: %v", userID, err)
 				continue

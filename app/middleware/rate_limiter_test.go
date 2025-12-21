@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -59,7 +60,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 			rejectedCount := 0
 			for i := 0; i < tt.requests; i++ {
 				w := httptest.NewRecorder()
-				req, _ := http.NewRequest("GET", "/test", nil)
+				req, _ := http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 				req.RemoteAddr = "192.168.1.1:12345"
 				router.ServeHTTP(w, req)
 
@@ -91,7 +92,7 @@ func TestStrictRateLimitMiddleware(t *testing.T) {
 	// First 2 requests should succeed
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/login", nil)
+		req, _ := http.NewRequestWithContext(context.Background(), "POST", "/login", nil)
 		req.RemoteAddr = "192.168.1.1:12345"
 		router.ServeHTTP(w, req)
 
@@ -102,7 +103,7 @@ func TestStrictRateLimitMiddleware(t *testing.T) {
 
 	// 3rd request should be rate limited
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "/login", nil)
 	req.RemoteAddr = "192.168.1.1:12345"
 	router.ServeHTTP(w, req)
 
@@ -126,7 +127,7 @@ func TestRateLimiterDifferentIPs(t *testing.T) {
 
 	for _, ip := range ips {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/test", nil)
+		req, _ := http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 		req.RemoteAddr = ip
 		router.ServeHTTP(w, req)
 
@@ -148,7 +149,7 @@ func TestVisitorCleanup(t *testing.T) {
 
 	// Make a request to create a visitor
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/test", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.100:12345"
 	router.ServeHTTP(w, req)
 
@@ -156,7 +157,7 @@ func TestVisitorCleanup(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	w2 := httptest.NewRecorder()
-	req2, _ := http.NewRequest("GET", "/test", nil)
+	req2, _ := http.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	req2.RemoteAddr = "192.168.1.101:12345"
 	router.ServeHTTP(w2, req2)
 

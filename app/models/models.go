@@ -35,24 +35,24 @@ type UpdateSnippetRequest struct {
 	Label       *string  `json:"label,omitempty"`
 	Shortcut    *string  `json:"shortcut,omitempty"`
 	Content     *string  `json:"content,omitempty"`
-	UserID      *string  `json:"userId,omitempty"` // UUID as string
-	Tags        []string `json:"tags,omitempty"`
+	UserID      *string  `json:"userId,omitempty"`      // UUID as string
 	ChangeNotes *string  `json:"changeNotes,omitempty"` // Optional description of the change
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // SnippetHistory represents a version in snippet history
 type SnippetHistory struct {
-	ID            int64     `json:"id"`
-	SnippetID     int64     `json:"snippetId"`
-	VersionNumber int       `json:"versionNumber"`
+	ChangedAt     time.Time `json:"changedAt"`
+	ChangeNotes   *string   `json:"changeNotes,omitempty"`
 	Label         string    `json:"label"`
 	Shortcut      string    `json:"shortcut"`
 	Content       string    `json:"content"`
-	Tags          []string  `json:"tags"`
 	ChangedBy     string    `json:"changedBy"`
 	ChangeType    string    `json:"changeType"`
-	ChangedAt     time.Time `json:"changedAt"`
-	ChangeNotes   *string   `json:"changeNotes,omitempty"`
+	Tags          []string  `json:"tags"`
+	ID            int64     `json:"id"`
+	SnippetID     int64     `json:"snippetId"`
+	VersionNumber int       `json:"versionNumber"`
 }
 
 // scanSnippet scans a database row into a Snippet struct
@@ -204,15 +204,15 @@ func ScanUserForAuth(scanner interface {
 
 // Session represents a user session
 type Session struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"userId"`
-	DeviceInfo     *string    `json:"deviceInfo,omitempty"`
-	IPAddressHash  *string    `json:"-"` // Hash of IP, not exposed in API
-	UserAgent      *string    `json:"userAgent,omitempty"`
-	RefreshTokenID *string    `json:"refreshTokenId,omitempty"`
-	Active         bool       `json:"active"`
 	LastActivity   time.Time  `json:"lastActivity"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
 	LoggedOutAt    *time.Time `json:"loggedOutAt,omitempty"`
+	DeviceInfo     *string    `json:"deviceInfo,omitempty"`
+	IPAddressHash  *string    `json:"-"` // Hash of IP, not exposed in API
+	UserAgent      *string    `json:"userAgent,omitempty"`
+	RefreshTokenID *string    `json:"refreshTokenId,omitempty"`
+	ID             string     `json:"id"`
+	UserID         string     `json:"userId"`
+	Active         bool       `json:"active"`
 }

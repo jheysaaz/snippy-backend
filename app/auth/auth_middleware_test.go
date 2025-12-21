@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,7 +108,7 @@ func TestMiddleware(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("GET", "/protected", nil)
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/protected", nil)
 			if tt.authHeader != "" {
 				req.Header.Set("Authorization", tt.authHeader)
 			}
@@ -131,12 +132,12 @@ func TestMiddleware(t *testing.T) {
 func TestGetUserIDFromContext(t *testing.T) {
 	tests := []struct {
 		name        string
-		setUserID   bool
 		userID      string
+		setUserID   bool
 		expectFound bool
 	}{
-		{"user_id exists", true, "test-user-123", true},
-		{"user_id missing", false, "", false},
+		{"user_id exists", "test-user-123", true, true},
+		{"user_id missing", "", false, false},
 	}
 
 	for _, tt := range tests {

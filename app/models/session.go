@@ -15,16 +15,7 @@ func CreateSession(userID, deviceInfo, ipAddress, userAgent, refreshTokenID stri
 	// Hash the IP address for privacy
 	ipHash := hashIP(ipAddress)
 
-	session := &Session{
-		UserID:         userID,
-		DeviceInfo:     &deviceInfo,
-		IPAddressHash:  &ipHash,
-		UserAgent:      &userAgent,
-		RefreshTokenID: &refreshTokenID,
-		Active:         true,
-		CreatedAt:      time.Now(),
-		ExpiresAt:      timePtr(time.Now().Add(RefreshTokenDuration)),
-	}
+	expiresAt := timePtr(time.Now().Add(RefreshTokenDuration))
 
 	query := `
 		INSERT INTO sessions (user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, expires_at)
@@ -32,7 +23,7 @@ func CreateSession(userID, deviceInfo, ipAddress, userAgent, refreshTokenID stri
 		RETURNING id, user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, last_activity, created_at, expires_at, logged_out_at
 	`
 
-	row := database.DB.QueryRow(query, userID, deviceInfo, ipHash, userAgent, refreshTokenID, true, session.ExpiresAt)
+	row := database.DB.QueryRow(query, userID, deviceInfo, ipHash, userAgent, refreshTokenID, true, expiresAt)
 	return scanSession(row)
 }
 

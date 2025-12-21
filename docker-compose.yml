@@ -9,6 +9,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U snippy_user -d snippy_production"]
       interval: 10s

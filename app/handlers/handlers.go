@@ -144,7 +144,7 @@ func syncSnippets(c *gin.Context) {
 		}
 		created = append(created, *snippet)
 	}
-	if err := createdRows.Err(); err != nil {
+	if errRows := createdRows.Err(); errRows != nil {
 		respondError(c, http.StatusInternalServerError, "Error iterating created snippets")
 		return
 	}
@@ -173,7 +173,7 @@ func syncSnippets(c *gin.Context) {
 		}
 		updated = append(updated, *snippet)
 	}
-	if err := updatedRows.Err(); err != nil {
+	if errRows := updatedRows.Err(); errRows != nil {
 		respondError(c, http.StatusInternalServerError, "Error iterating updated snippets")
 		return
 	}
@@ -194,8 +194,8 @@ func syncSnippets(c *gin.Context) {
 	defer deletedRows.Close()
 
 	type deletedSnippet struct {
-		ID        int64      `json:"id"`
 		DeletedAt *time.Time `json:"deletedAt"`
+		ID        int64      `json:"id"`
 	}
 
 	deleted := make([]deletedSnippet, 0, 10)
@@ -395,7 +395,7 @@ func updateSnippet(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch current snippet")
 		return
 	}
-	currentSnippet.Tags = tags
+	// currentSnippet.Tags = tags // Unused, removed
 
 	// Static UPDATE using COALESCE to only update provided fields
 	query := `

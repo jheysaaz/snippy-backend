@@ -191,12 +191,12 @@ func TestCheckAvailability(t *testing.T) {
 	router.GET("/api/v1/auth/availability", CheckAvailability)
 
 	tests := []struct {
+		usernameAvailable *bool
+		emailAvailable    *bool
 		name              string
 		username          string
 		email             string
 		expectedStatus    int
-		usernameAvailable *bool
-		emailAvailable    *bool
 	}{
 		{
 			name:              "both available",

@@ -5,12 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
-        default: 'production'
-        type: choice
-         # TODO: Implenent the option to deploy to diferents droplets depending on staging or production
-         # PS: Project still not generate money to keep two different droplets so it will only deploy to production for a while :)
+        default: "production"
+        type:
+          choice
+          # TODO: Implenent the option to deploy to diferents droplets depending on staging or production
+          # PS: Project still not generate money to keep two different droplets so it will only deploy to production for a while :)
         options:
           - production
           - staging
@@ -23,7 +24,7 @@ on:
     types:
       - completed
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 jobs:
   # Only run if CI was successful
@@ -109,6 +110,17 @@ jobs:
           source: "docker-compose.yml"
           target: "/root/snippy-api/"
           overwrite: true
+
+      - name: Copy migrations folder
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "migrations/*"
+          target: "/root/snippy-api/"
+          overwrite: true
+          strip_components: 0
 
       - name: Copy deploy script
         uses: appleboy/scp-action@v1.0.0

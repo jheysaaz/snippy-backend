@@ -464,8 +464,8 @@ func login(c *gin.Context) {
 	deviceInfo := c.GetHeader("User-Agent")
 
 	// Store refresh token in database
-	if err := models.StoreRefreshToken(user.ID, refreshToken, deviceInfo); err != nil {
-		log.Printf("failed to store refresh token for %q: %v", user.ID, err)
+	if errStore := models.StoreRefreshToken(user.ID, refreshToken, deviceInfo); errStore != nil {
+		log.Printf("failed to store refresh token for %q: %v", user.ID, errStore)
 		respondError(c, http.StatusInternalServerError, "Failed to store refresh token")
 		return
 	}

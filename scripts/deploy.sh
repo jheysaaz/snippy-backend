@@ -31,6 +31,18 @@ systemctl restart ${SERVICE_NAME}
 echo "Waiting for services to start..."
 sleep 10
 
+# Run migrations
+echo "Running database migrations..."
+for migration in migrations/*.sql; do
+  if [[ ! "$migration" =~ rollback\.sql$ ]] && [[ -f "$migration" ]]; then
+    echo "Applying migration: $(basename $migration)"
+    docker-compose exec -T postgres psql -U snippy_user -d snippy_production -f "/migrations/$(basename $migration)" || {
+      echo "Warning: Migration $(basename $migration) may have already been applied or encountered an error"
+    }
+  fi
+done
+echo "Migrations completed"
+
 # Check status
 echo "Checking service status..."
 systemctl status ${SERVICE_NAME} --no-pager || true
