@@ -166,3 +166,116 @@ func (m *mockScanner) Scan(dest ...interface{}) error {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// Test User scanning functions
+func TestScanUser(t *testing.T) {
+	now := time.Now()
+
+	mockRow := &mockUserScanner{
+		id:        "123e4567-e89b-12d3-a456-426614174000",
+		username:  "testuser",
+		email:     "test@example.com",
+		fullName:  "Test User",
+		avatarURL: "https://example.com/avatar.jpg",
+		createdAt: now,
+		updatedAt: now,
+	}
+
+	user, err := ScanUser(mockRow)
+	if err != nil {
+		t.Fatalf("ScanUser failed: %v", err)
+	}
+
+	if user.ID != mockRow.id {
+		t.Errorf("ID = %s, want %s", user.ID, mockRow.id)
+	}
+	if user.Username != mockRow.username {
+		t.Errorf("Username = %s, want %s", user.Username, mockRow.username)
+	}
+	if user.Email != mockRow.email {
+		t.Errorf("Email = %s, want %s", user.Email, mockRow.email)
+	}
+}
+
+func TestScanUserForAuth(t *testing.T) {
+	now := time.Now()
+
+	mockRow := &mockUserAuthScanner{
+		id:           "123e4567-e89b-12d3-a456-426614174000",
+		username:     "testuser",
+		email:        "test@example.com",
+		passwordHash: "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+		fullName:     "Test User",
+		avatarURL:    "https://example.com/avatar.jpg",
+		createdAt:    now,
+		updatedAt:    now,
+	}
+
+	user, err := ScanUserForAuth(mockRow)
+	if err != nil {
+		t.Fatalf("ScanUserForAuth failed: %v", err)
+	}
+
+	if user.ID != mockRow.id {
+		t.Errorf("ID = %s, want %s", user.ID, mockRow.id)
+	}
+	if user.PasswordHash != mockRow.passwordHash {
+		t.Errorf("PasswordHash = %s, want %s", user.PasswordHash, mockRow.passwordHash)
+	}
+}
+
+// Mock user scanner for ScanUser
+type mockUserScanner struct {
+	createdAt time.Time
+	updatedAt time.Time
+	username  string
+	email     string
+	fullName  string
+	avatarURL string
+	id        string
+}
+
+func (m *mockUserScanner) Scan(dest ...interface{}) error {
+	if len(dest) != 7 {
+		return sql.ErrNoRows
+	}
+
+	*dest[0].(*string) = m.id
+	*dest[1].(*string) = m.username
+	*dest[2].(*string) = m.email
+	*dest[3].(*string) = m.fullName
+	*dest[4].(*string) = m.avatarURL
+	*dest[5].(*time.Time) = m.createdAt
+	*dest[6].(*time.Time) = m.updatedAt
+
+	return nil
+}
+
+// Mock user scanner for ScanUserForAuth
+type mockUserAuthScanner struct {
+	createdAt    time.Time
+	updatedAt    time.Time
+	username     string
+	email        string
+	passwordHash string
+	fullName     string
+	avatarURL    string
+	id           string
+}
+
+func (m *mockUserAuthScanner) Scan(dest ...interface{}) error {
+	if len(dest) != 8 {
+		return sql.ErrNoRows
+	}
+
+	*dest[0].(*string) = m.id
+	*dest[1].(*string) = m.username
+	*dest[2].(*string) = m.email
+	*dest[3].(*string) = m.passwordHash
+	*dest[4].(*string) = m.fullName
+	*dest[5].(*string) = m.avatarURL
+	*dest[6].(*time.Time) = m.createdAt
+	*dest[7].(*time.Time) = m.updatedAt
+
+	return nil
+}

@@ -31,7 +31,7 @@ func getSnippets(c *gin.Context) {
 
 	// Build query with optional filters
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE is_deleted = false
 	`
@@ -111,7 +111,7 @@ func getSnippet(c *gin.Context) {
 	}
 
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE id = $1 AND is_deleted = false
 	`
@@ -158,7 +158,7 @@ func createSnippet(c *gin.Context) {
 	query := `
 		INSERT INTO snippets (label, shortcut, content, tags, user_id)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
 	row := database.DB.QueryRow(
@@ -255,7 +255,7 @@ func updateSnippet(c *gin.Context) {
 			content = COALESCE($3, content),
 			tags = COALESCE($4, tags)
 		WHERE id = $5 AND is_deleted = false
-		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
 	row := database.DB.QueryRow(query, labelVal, shortcutVal, contentVal, tagsVal, id)

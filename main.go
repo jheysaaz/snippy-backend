@@ -94,6 +94,7 @@ func main() {
 		{
 			authRoutes.POST("/register", handlers.CreateUser)
 			authRoutes.POST("/login", handlers.Login)
+			authRoutes.GET("/availability", handlers.CheckAvailability)
 			authRoutes.POST("/refresh", handlers.RefreshAccessToken)
 			authRoutes.POST("/logout", handlers.Logout)
 			authRoutes.POST("/logout-all", handlers.LogoutAll)

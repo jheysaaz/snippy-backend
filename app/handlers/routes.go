@@ -10,6 +10,7 @@ import (
 // Auth handlers
 var (
 	Login              = login
+	CheckAvailability  = checkAvailability
 	RefreshAccessToken = refreshAccessToken
 	Logout             = logout
 	LogoutAll          = logoutAll

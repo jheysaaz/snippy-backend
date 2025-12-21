@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"sync"
 	"time"
@@ -22,6 +24,12 @@ type visitor struct {
 	lastSeen time.Time
 }
 
+// hashIP hashes an IP address for privacy
+func hashIP(ip string) string {
+	hash := sha256.Sum256([]byte(ip))
+	return hex.EncodeToString(hash[:])
+}
+
 // NewRateLimiter creates a new rate limiter
 func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
 	rl := &RateLimiter{
@@ -41,10 +49,13 @@ func (rl *RateLimiter) getVisitor(ip string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	v, exists := rl.visitors[ip]
+	// Hash IP for privacy
+	hashedIP := hashIP(ip)
+
+	v, exists := rl.visitors[hashedIP]
 	if !exists {
 		limiter := rate.NewLimiter(rl.rate, rl.burst)
-		rl.visitors[ip] = &visitor{limiter, time.Now()}
+		rl.visitors[hashedIP] = &visitor{limiter, time.Now()}
 		return limiter
 	}
 
@@ -52,7 +63,7 @@ func (rl *RateLimiter) getVisitor(ip string) *rate.Limiter {
 	return v.limiter
 }
 
-// cleanupVisitors removes visitors that haven't been seen for > 3 minutes
+// cleanupVisitors removes hashed visitor entries that haven't been seen for > 3 minutes
 func (rl *RateLimiter) cleanupVisitors() {
 	for {
 		time.Sleep(time.Minute)

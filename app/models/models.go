@@ -11,14 +11,14 @@ import (
 type Snippet struct {
 	CreatedAt time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt time.Time  `json:"updatedAt" db:"updated_at"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty" db:"deleted_at"`
+	DeletedAt *time.Time `json:"-" db:"deleted_at"`
 	UserID    *string    `json:"userId,omitempty" db:"user_id"`
 	Label     string     `json:"label" db:"label"`
 	Shortcut  string     `json:"shortcut" db:"shortcut"`
 	Content   string     `json:"content" db:"content"`
 	Tags      []string   `json:"tags" db:"tags"`
 	ID        int64      `json:"id" db:"id"`
-	IsDeleted bool       `json:"isDeleted" db:"is_deleted"`
+	IsDeleted bool       `json:"-" db:"is_deleted"`
 }
 
 // CreateSnippetRequest for creating a new snippet
@@ -56,8 +56,6 @@ func ScanSnippet(scanner interface {
 		&userID,
 		&s.CreatedAt,
 		&s.UpdatedAt,
-		&s.IsDeleted,
-		&s.DeletedAt,
 	)
 
 	if err != nil {
@@ -77,13 +75,13 @@ type User struct {
 	ID           string     `json:"id"` // UUID as string
 	CreatedAt    time.Time  `json:"createdAt"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
-	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
+	DeletedAt    *time.Time `json:"-"`
 	Username     string     `json:"username"`
 	Email        string     `json:"email"`
 	PasswordHash string     `json:"-"` // Never expose password hash in JSON
 	FullName     string     `json:"fullName"`
 	AvatarURL    string     `json:"avatarUrl"`
-	IsDeleted    bool       `json:"isDeleted"`
+	IsDeleted    bool       `json:"-"`
 }
 
 // CreateUserRequest for creating a new user
@@ -150,13 +148,34 @@ func ScanUser(scanner interface {
 		&user.ID,
 		&user.Username,
 		&user.Email,
+		&user.FullName,
+		&user.AvatarURL,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// ScanUserForAuth scans a database row into a User struct including password_hash (for authentication)
+func ScanUserForAuth(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*User, error) {
+	var user User
+
+	err := scanner.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
 		&user.PasswordHash,
 		&user.FullName,
 		&user.AvatarURL,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&user.IsDeleted,
-		&user.DeletedAt,
 	)
 
 	if err != nil {

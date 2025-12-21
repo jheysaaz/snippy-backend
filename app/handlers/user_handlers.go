@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jheysaaz/snippy-backend/app/auth"
 	"github.com/jheysaaz/snippy-backend/app/database"
@@ -23,7 +24,7 @@ import (
 // @Router /users [get]
 func getUsers(c *gin.Context) {
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, username, email, full_name, avatar_url, created_at, updated_at
 		FROM users
 		WHERE is_deleted = false
 		ORDER BY created_at DESC
@@ -68,9 +69,9 @@ func getUser(c *gin.Context) {
 	id := c.Param("id")
 
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, full_name, avatar_url, created_at, updated_at
 		FROM users
-		WHERE id = $1
+		WHERE id = $1 AND is_deleted = false
 	`
 
 	row := database.DB.QueryRow(query, id)
@@ -110,7 +111,7 @@ func createUser(c *gin.Context) {
 	query := `
 		INSERT INTO users (username, email, password_hash, full_name, avatar_url)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
+		RETURNING id, username, email, full_name, avatar_url, created_at, updated_at
 	`
 
 	row := database.DB.QueryRow(
@@ -189,8 +190,8 @@ func updateUser(c *gin.Context) {
 			password_hash = COALESCE($3, password_hash),
 			full_name = COALESCE($4, full_name),
 			avatar_url = COALESCE($5, avatar_url)
-		WHERE id = $6
-		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		WHERE id = $6 AND is_deleted = false
+		RETURNING id, username, email, full_name, avatar_url, created_at, updated_at
 	`
 
 	row := database.DB.QueryRow(query, usernameVal, emailVal, passwordHashVal, fullNameVal, avatarURLVal, id)
@@ -267,7 +268,7 @@ func getUserSnippets(c *gin.Context, userID string) {
 
 	// Build query with optional filters
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
 		FROM snippets
 		WHERE user_id = $1 AND is_deleted = false
 	`
@@ -326,6 +327,76 @@ func getUserSnippets(c *gin.Context, userID string) {
 	respondWithCount(c, snippets, len(snippets))
 }
 
+// checkAvailability verifies if a username or email is available for registration
+// @Summary Check username/email availability
+// @Description Quickly verify whether a username or email can be used
+// @Tags auth
+// @Produce json
+// @Param username query string false "Username to check"
+// @Param email query string false "Email to check"
+// @Success 200 {object} map[string]bool
+// @Failure 400 {object} map[string]string
+// @Router /auth/availability [get]
+func checkAvailability(c *gin.Context) {
+	username := strings.TrimSpace(c.Query("username"))
+	email := strings.TrimSpace(c.Query("email"))
+
+	if username == "" && email == "" {
+		respondError(c, http.StatusBadRequest, "username or email required")
+		return
+	}
+
+	conditions := make([]string, 0, 2)
+	args := make([]interface{}, 0, 2)
+
+	if username != "" {
+		conditions = append(conditions, "username = $"+strconv.Itoa(len(args)+1))
+		args = append(args, username)
+	}
+
+	if email != "" {
+		conditions = append(conditions, "email = $"+strconv.Itoa(len(args)+1))
+		args = append(args, email)
+	}
+
+	query := `
+		SELECT username, email
+		FROM users
+		WHERE is_deleted = false AND (` + strings.Join(conditions, " OR ") + `)
+		LIMIT 1
+	`
+
+	var existingUsername sql.NullString
+	var existingEmail sql.NullString
+	err := database.DB.QueryRow(query, args...).Scan(&existingUsername, &existingEmail)
+	if err != nil && err != sql.ErrNoRows {
+		respondError(c, http.StatusInternalServerError, "Failed to check availability")
+		return
+	}
+
+	var usernameAvailable *bool
+	if username != "" {
+		available := !(existingUsername.Valid && existingUsername.String == username)
+		usernameAvailable = &available
+	}
+
+	var emailAvailable *bool
+	if email != "" {
+		available := !(existingEmail.Valid && existingEmail.String == email)
+		emailAvailable = &available
+	}
+
+	response := struct {
+		UsernameAvailable *bool `json:"usernameAvailable,omitempty"`
+		EmailAvailable    *bool `json:"emailAvailable,omitempty"`
+	}{
+		UsernameAvailable: usernameAvailable,
+		EmailAvailable:    emailAvailable,
+	}
+
+	respondSuccess(c, http.StatusOK, response)
+}
+
 // login handles user login with username or email and password
 // @Summary Login
 // @Description Authenticate with username/email and password
@@ -346,18 +417,19 @@ func login(c *gin.Context) {
 
 	// Query for user by username OR email
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
 		FROM users
 		WHERE (username = $1 OR email = $1) AND is_deleted = false
 	`
 
 	row := database.DB.QueryRow(query, req.Login)
-	user, err := models.ScanUser(row)
+	user, err := models.ScanUserForAuth(row)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusUnauthorized, "Invalid username/email or password")
 		return
 	}
 	if err != nil {
+		log.Printf("login query failed for %q: %v", req.Login, err)
 		respondError(c, http.StatusInternalServerError, "Failed to authenticate")
 		return
 	}
@@ -387,6 +459,7 @@ func login(c *gin.Context) {
 
 	// Store refresh token in database
 	if err := models.StoreRefreshToken(user.ID, refreshToken, deviceInfo); err != nil {
+		log.Printf("failed to store refresh token for %q: %v", user.ID, err)
 		respondError(c, http.StatusInternalServerError, "Failed to store refresh token")
 		return
 	}
@@ -436,7 +509,7 @@ func refreshAccessToken(c *gin.Context) {
 
 	// Get user from database
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
+		SELECT id, username, email, full_name, avatar_url, created_at, updated_at
 		FROM users
 		WHERE id = $1 AND is_deleted = false
 	`

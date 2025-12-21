@@ -140,3 +140,117 @@ func TestLoginWithUsernameOrEmail(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckAvailability(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer func() {
+		if err := testDB.Close(); err != nil {
+			t.Logf("Error closing test database: %v", err)
+		}
+	}()
+
+	dbURL := getHandlersTestDBURL()
+	os.Setenv("DATABASE_URL", dbURL)
+	defer os.Unsetenv("DATABASE_URL")
+
+	if err := database.Init(); err != nil {
+		t.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.DB.Close()
+
+	database.DB = testDB
+
+	// Create a test user
+	hashedPassword, _ := auth.HashPassword("testpassword123")
+	_, _ = testDB.Exec(`
+		INSERT INTO users (username, email, password_hash, full_name, avatar_url)
+		VALUES ('existinguser', 'existing@example.com', $1, '', '')
+	`, hashedPassword)
+
+	router := gin.New()
+	router.GET("/api/v1/auth/availability", CheckAvailability)
+
+	tests := []struct {
+		name               string
+		username           string
+		email              string
+		expectedStatus     int
+		usernameAvailable  *bool
+		emailAvailable     *bool
+	}{
+		{
+			name:               "both available",
+			username:           "newuser",
+			email:              "new@example.com",
+			expectedStatus:     http.StatusOK,
+			usernameAvailable:  boolPtr(true),
+			emailAvailable:     boolPtr(true),
+		},
+		{
+			name:               "username taken",
+			username:           "existinguser",
+			email:              "new@example.com",
+			expectedStatus:     http.StatusOK,
+			usernameAvailable:  boolPtr(false),
+			emailAvailable:     boolPtr(true),
+		},
+		{
+			name:               "email taken",
+			username:           "newuser",
+			email:              "existing@example.com",
+			expectedStatus:     http.StatusOK,
+			usernameAvailable:  boolPtr(true),
+			emailAvailable:     boolPtr(false),
+		},
+		{
+			name:           "no parameters",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := "/api/v1/auth/availability?"
+			if tt.username != "" {
+				url += "username=" + tt.username + "&"
+			}
+			if tt.email != "" {
+				url += "email=" + tt.email
+			}
+
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+
+			if tt.expectedStatus == http.StatusOK {
+				var response struct {
+					UsernameAvailable *bool `json:"usernameAvailable,omitempty"`
+					EmailAvailable    *bool `json:"emailAvailable,omitempty"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+					t.Fatalf("Failed to parse response: %v", err)
+				}
+
+				if tt.usernameAvailable != nil && response.UsernameAvailable != nil {
+					if *response.UsernameAvailable != *tt.usernameAvailable {
+						t.Errorf("Expected usernameAvailable=%v, got %v", *tt.usernameAvailable, *response.UsernameAvailable)
+					}
+				}
+
+				if tt.emailAvailable != nil && response.EmailAvailable != nil {
+					if *response.EmailAvailable != *tt.emailAvailable {
+						t.Errorf("Expected emailAvailable=%v, got %v", *tt.emailAvailable, *response.EmailAvailable)
+					}
+				}
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}

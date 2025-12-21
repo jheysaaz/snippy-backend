@@ -93,12 +93,8 @@ definitions:
         type: string
       createdAt:
         type: string
-      deletedAt:
-        type: string
       id:
         type: integer
-      isDeleted:
-        type: boolean
       label:
         type: string
       shortcut:
@@ -148,8 +144,6 @@ definitions:
         type: string
       createdAt:
         type: string
-      deletedAt:
-        type: string
       email:
         type: string
       fullName:
@@ -157,8 +151,6 @@ definitions:
       id:
         description: UUID as string
         type: string
-      isDeleted:
-        type: boolean
       updatedAt:
         type: string
       username:
@@ -171,6 +163,36 @@ info:
   title: Snippy API
   version: "1.0"
 paths:
+  /auth/availability:
+    get:
+      description: Quickly verify whether a username or email can be used
+      parameters:
+      - description: Username to check
+        in: query
+        name: username
+        type: string
+      - description: Email to check
+        in: query
+        name: email
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check username/email availability
+      tags:
+      - auth
   /auth/login:
     post:
       consumes:
