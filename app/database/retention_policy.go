@@ -57,6 +57,15 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		}
 	}
 
+	// 0.1 Cleanup expired and old revoked refresh tokens
+	if _, err := DB.ExecContext(ctx, `
+		DELETE FROM refresh_tokens
+		WHERE (expires_at < NOW() - INTERVAL '7 days')
+		   OR (revoked = TRUE AND created_at < NOW() - INTERVAL '7 days')
+	`); err != nil {
+		log.Printf("Error cleaning up expired/revoked refresh tokens: %v", err)
+	}
+
 	// 1. Delete old snippet versions (older than 60 days)
 	log.Printf("Deleting snippet versions older than %v", versionCutoff)
 	result, err = DB.ExecContext(ctx, `
