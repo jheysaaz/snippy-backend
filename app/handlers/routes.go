@@ -40,6 +40,15 @@ var (
 	RestoreSnippetVersion = restoreSnippetVersion
 )
 
+// Role handlers
+var (
+	GetUserRoles   = getUserRoles
+	AssignUserRole = assignUserRole
+	RevokeUserRole = revokeUserRole
+	GetMyRoles     = getMyRoles
+	GetAllRoles    = getAllRoles
+)
+
 // GetCurrentUser returns the currently authenticated user
 // @Summary Get current user profile
 // @Description Get the profile of the authenticated user

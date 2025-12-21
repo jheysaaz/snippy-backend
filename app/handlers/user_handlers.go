@@ -15,23 +15,43 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getUsers retrieves all users
+// getUsers retrieves all users with pagination
 // @Summary List all users
-// @Description Get all users
+// @Description Get all users with pagination
 // @Tags users
 // @Produce json
+// @Param limit query int false "Limit results (default 50, max 100)"
+// @Param offset query int false "Offset for pagination"
 // @Success 200 {object} map[string]interface{}
 // @Security BearerAuth
 // @Router /users [get]
 func getUsers(c *gin.Context) {
+	// Parse pagination params with defaults
+	limit := 50
+	offset := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+			if limit > 100 {
+				limit = 100
+			}
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
 	query := `
 		SELECT id, username, email, full_name, avatar_url, created_at, updated_at
 		FROM users
 		WHERE is_deleted = false
 		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
 
-	rows, err := database.DB.QueryContext(c.Request.Context(), query)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, limit, offset)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch users")
 		return
@@ -456,11 +476,31 @@ func login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT access token (short-lived)
-	accessToken, err := auth.GenerateAccessToken(user)
+	// Get user roles for JWT
+	roles, err := models.GetUserRoleNames(c.Request.Context(), user.ID)
+	if err != nil {
+		log.Printf("Failed to fetch roles for user %q: %v", user.ID, err)
+		roles = []string{} // Continue with empty roles on error
+	}
+
+	// Generate JWT access token with roles (short-lived)
+	accessToken, err := auth.GenerateAccessTokenWithRoles(user, roles)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to generate access token")
 		return
+	}
+
+	// Get device info from user agent (optional)
+	deviceInfo := c.GetHeader("User-Agent")
+
+	// Get client IP address
+	clientIP := c.ClientIP()
+
+	// Create a session for this login
+	session, err := models.CreateSession(c.Request.Context(), user.ID, deviceInfo, clientIP, c.GetHeader("User-Agent"))
+	if err != nil {
+		log.Printf("failed to create session for user %q: %v", user.ID, err)
+		// Don't fail login if session creation fails, just log it
 	}
 
 	// Generate refresh token (long-lived)
@@ -470,24 +510,12 @@ func login(c *gin.Context) {
 		return
 	}
 
-	// Get device info from user agent (optional)
-	deviceInfo := c.GetHeader("User-Agent")
-
-	// Store refresh token in database
-	if errStore := models.StoreRefreshToken(c.Request.Context(), user.ID, refreshToken, deviceInfo); errStore != nil {
-		log.Printf("failed to store refresh token for %q: %v", user.ID, errStore)
-		respondError(c, http.StatusInternalServerError, "Failed to store refresh token")
-		return
-	}
-
-	// Get client IP address
-	clientIP := c.ClientIP()
-
-	// Create a session for this login
-	_, err = models.CreateSession(c.Request.Context(), user.ID, deviceInfo, clientIP, c.GetHeader("User-Agent"), "")
-	if err != nil {
-		log.Printf("failed to create session for user %q: %v", user.ID, err)
-		// Don't fail login if session creation fails, just log it
+	// Store refresh token bound to session
+	if session != nil {
+		if errStore := models.StoreRefreshToken(c.Request.Context(), session.ID, refreshToken); errStore != nil {
+			log.Printf("failed to store refresh token for session %q: %v", session.ID, errStore)
+			// Continue without failing login
+		}
 	}
 
 	// Set refresh token as HTTP-only secure cookie
@@ -567,11 +595,42 @@ func refreshAccessToken(c *gin.Context) {
 		return
 	}
 
-	// Generate new access token
-	accessToken, err := auth.GenerateAccessToken(user)
+	// Get user roles for JWT
+	roles, err := models.GetUserRoleNames(c.Request.Context(), user.ID)
+	if err != nil {
+		log.Printf("Failed to fetch roles for user %q: %v", user.ID, err)
+		roles = []string{} // Continue with empty roles on error
+	}
+
+	// Generate new access token with roles
+	accessToken, err := auth.GenerateAccessTokenWithRoles(user, roles)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to generate access token")
 		return
+	}
+
+	// Rotate refresh token: revoke old and issue a new one for same session
+	if err := models.RevokeRefreshToken(c.Request.Context(), refreshToken); err != nil {
+		log.Printf("failed to revoke used refresh token: %v", err)
+		// continue; not fatal for issuing access token
+	}
+
+	newRefreshToken, err := models.GenerateRefreshToken()
+	if err == nil {
+		// Store new refresh token for the same session
+		if rt.SessionID != "" {
+			_ = models.StoreRefreshToken(c.Request.Context(), rt.SessionID, newRefreshToken)
+		}
+		// Update cookie
+		c.SetCookie(
+			"refresh_token",
+			newRefreshToken,
+			int(models.RefreshTokenDuration.Seconds()),
+			"/",
+			"",
+			c.Request.URL.Scheme == "https",
+			true,
+		)
 	}
 
 	// Return new access token
@@ -714,6 +773,11 @@ func logoutSession(c *gin.Context) {
 	if err := models.LogoutSession(c.Request.Context(), sessionID); err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to logout session")
 		return
+	}
+
+	// Revoke all refresh tokens for this session
+	if err := models.RevokeAllSessionTokens(c.Request.Context(), sessionID); err != nil {
+		log.Printf("Failed to revoke tokens for session %s: %v", sessionID, err)
 	}
 
 	respondSuccess(c, http.StatusOK, gin.H{"message": "Session logged out successfully"})

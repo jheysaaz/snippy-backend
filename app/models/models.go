@@ -138,13 +138,13 @@ type RefreshTokenResponse struct {
 
 // RefreshToken database model
 type RefreshToken struct {
-	ID         string    `json:"id"`
-	ExpiresAt  time.Time `json:"expiresAt"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UserID     string    `json:"userId"`
-	Token      string    `json:"token"`
-	DeviceInfo string    `json:"deviceInfo,omitempty"`
-	Revoked    bool      `json:"revoked"`
+	ID        string    `json:"id"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+	Token     string    `json:"token"`
+	Revoked   bool      `json:"revoked"`
+	SessionID string    `json:"sessionId"`
+	UserID    string    `json:"userId"` // derived via session join
 }
 
 // UpdateUserRequest for updating an existing user
@@ -205,15 +205,14 @@ func ScanUserForAuth(scanner interface {
 
 // Session represents a user session
 type Session struct {
-	LastActivity   time.Time  `json:"lastActivity"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
-	LoggedOutAt    *time.Time `json:"loggedOutAt,omitempty"`
-	DeviceInfo     *string    `json:"deviceInfo,omitempty"`
-	IPAddressHash  *string    `json:"-"` // Hash of IP, not exposed in API
-	UserAgent      *string    `json:"userAgent,omitempty"`
-	RefreshTokenID *string    `json:"refreshTokenId,omitempty"`
-	ID             string     `json:"id"`
-	UserID         string     `json:"userId"`
-	Active         bool       `json:"active"`
+	LastActivity  time.Time  `json:"lastActivity"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
+	LoggedOutAt   *time.Time `json:"loggedOutAt,omitempty"`
+	DeviceInfo    *string    `json:"deviceInfo,omitempty"`
+	IPAddressHash *string    `json:"-"` // Hash of IP, not exposed in API
+	UserAgent     *string    `json:"userAgent,omitempty"`
+	ID            string     `json:"id"`
+	UserID        string     `json:"userId"`
+	Active        bool       `json:"active"`
 }

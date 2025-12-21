@@ -149,9 +149,10 @@ var jwtSecret = []byte(getEnvOrDefault("JWT_SECRET", "your-secret-key-change-in-
 
 // Claims represents the JWT claims
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
+	UserID   string   `json:"user_id"`
+	Username string   `json:"username"`
+	Email    string   `json:"email"`
+	Roles    []string `json:"roles"` // User roles for authorization
 	jwt.RegisteredClaims
 }
 
@@ -163,12 +164,18 @@ func GenerateToken(user *models.User) (string, error) {
 
 // GenerateAccessToken generates a short-lived JWT access token for a user
 func GenerateAccessToken(user *models.User) (string, error) {
+	return GenerateAccessTokenWithRoles(user, nil)
+}
+
+// GenerateAccessTokenWithRoles generates a JWT access token with user roles included.
+func GenerateAccessTokenWithRoles(user *models.User, roles []string) (string, error) {
 	expirationTime := time.Now().Add(models.AccessTokenDuration) // 15 minutes
 
 	claims := &Claims{
 		UserID:   user.ID,
 		Username: user.Username,
 		Email:    user.Email,
+		Roles:    roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

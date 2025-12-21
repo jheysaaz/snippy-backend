@@ -13,26 +13,26 @@ import (
 )
 
 // CreateSession creates a new user session.
-func CreateSession(ctx context.Context, userID, deviceInfo, ipAddress, userAgent, refreshTokenID string) (*Session, error) {
+func CreateSession(ctx context.Context, userID, deviceInfo, ipAddress, userAgent string) (*Session, error) {
 	// Hash the IP address for privacy
 	ipHash := hashIP(ipAddress)
 
 	expiresAt := timePtr(time.Now().Add(RefreshTokenDuration))
 
 	query := `
-		INSERT INTO sessions (user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, last_activity, created_at, expires_at, logged_out_at
+		INSERT INTO sessions (user_id, device_info, ip_address_hash, user_agent, active, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, user_id, device_info, ip_address_hash, user_agent, active, last_activity, created_at, expires_at, logged_out_at
 	`
 
-	row := database.DB.QueryRowContext(ctx, query, userID, deviceInfo, ipHash, userAgent, refreshTokenID, true, expiresAt)
+	row := database.DB.QueryRowContext(ctx, query, userID, deviceInfo, ipHash, userAgent, true, expiresAt)
 	return scanSession(row)
 }
 
 // GetUserSessions gets all active sessions for a user.
 func GetUserSessions(ctx context.Context, userID string) ([]Session, error) {
 	query := `
-		SELECT id, user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, last_activity, created_at, expires_at, logged_out_at
+		SELECT id, user_id, device_info, ip_address_hash, user_agent, active, last_activity, created_at, expires_at, logged_out_at
 		FROM sessions
 		WHERE user_id = $1 AND active = true
 		ORDER BY last_activity DESC
@@ -64,7 +64,7 @@ func GetUserSessions(ctx context.Context, userID string) ([]Session, error) {
 // GetSessionByID gets a specific session.
 func GetSessionByID(ctx context.Context, sessionID string) (*Session, error) {
 	query := `
-		SELECT id, user_id, device_info, ip_address_hash, user_agent, refresh_token_id, active, last_activity, created_at, expires_at, logged_out_at
+		SELECT id, user_id, device_info, ip_address_hash, user_agent, active, last_activity, created_at, expires_at, logged_out_at
 		FROM sessions
 		WHERE id = $1
 	`
@@ -130,7 +130,6 @@ func scanSession(scanner interface {
 		&session.DeviceInfo,
 		&session.IPAddressHash,
 		&session.UserAgent,
-		&session.RefreshTokenID,
 		&session.Active,
 		&session.LastActivity,
 		&session.CreatedAt,

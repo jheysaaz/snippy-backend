@@ -2,9 +2,11 @@
 package auth
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jheysaaz/snippy-backend/app/models"
@@ -40,16 +42,20 @@ func Middleware() gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("email", claims.Email)
+		c.Set("roles", claims.Roles) // Store roles in context for authorization checks
 
 		// Track session activity if session ID is provided
 		sessionID := c.GetHeader("X-Session-ID")
 		if sessionID != "" {
 			// Update session activity in background to avoid blocking
-			go func() {
-				if err := models.UpdateSessionActivity(c.Request.Context(), sessionID); err != nil {
-					log.Printf("Failed to update session activity for %s: %v", sessionID, err)
+			// Use background context since request context may be cancelled
+			go func(sid string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := models.UpdateSessionActivity(ctx, sid); err != nil {
+					log.Printf("Failed to update session activity for %s: %v", sid, err)
 				}
-			}()
+			}(sessionID)
 		}
 
 		c.Next()

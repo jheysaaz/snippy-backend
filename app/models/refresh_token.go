@@ -39,13 +39,13 @@ func GenerateRefreshToken() (string, error) {
 }
 
 // StoreRefreshToken saves a refresh token to the database.
-func StoreRefreshToken(ctx context.Context, userID, token, deviceInfo string) error {
+func StoreRefreshToken(ctx context.Context, sessionID, token string) error {
 	expiresAt := time.Now().Add(RefreshTokenDuration)
 
 	_, err := database.DB.ExecContext(ctx, `
-		INSERT INTO refresh_tokens (user_id, token, expires_at, device_info)
-		VALUES ($1, $2, $3, $4)
-	`, userID, token, expiresAt, deviceInfo)
+		INSERT INTO refresh_tokens (session_id, token, expires_at)
+		VALUES ($1, $2, $3)
+	`, sessionID, token, expiresAt)
 
 	return err
 }
@@ -55,17 +55,19 @@ func ValidateRefreshToken(ctx context.Context, token string) (*RefreshToken, err
 	var rt RefreshToken
 
 	err := database.DB.QueryRowContext(ctx, `
-		SELECT id, user_id, token, expires_at, created_at, revoked, device_info
-		FROM refresh_tokens
-		WHERE token = $1
+		SELECT rt.id, rt.token, rt.expires_at, rt.created_at, rt.revoked,
+		       s.id AS session_id, s.user_id AS user_id
+		FROM refresh_tokens rt
+		JOIN sessions s ON rt.session_id = s.id
+		WHERE rt.token = $1
 	`, token).Scan(
 		&rt.ID,
-		&rt.UserID,
 		&rt.Token,
 		&rt.ExpiresAt,
 		&rt.CreatedAt,
 		&rt.Revoked,
-		&rt.DeviceInfo,
+		&rt.SessionID,
+		&rt.UserID,
 	)
 
 	if err != nil {
@@ -101,9 +103,18 @@ func RevokeAllUserTokens(ctx context.Context, userID string) error {
 	_, err := database.DB.ExecContext(ctx, `
 		UPDATE refresh_tokens
 		SET revoked = TRUE
-		WHERE user_id = $1 AND revoked = FALSE
+		WHERE session_id IN (SELECT id FROM sessions WHERE user_id = $1) AND revoked = FALSE
 	`, userID)
+	return err
+}
 
+// RevokeAllSessionTokens revokes all refresh tokens for a specific session.
+func RevokeAllSessionTokens(ctx context.Context, sessionID string) error {
+	_, err := database.DB.ExecContext(ctx, `
+		UPDATE refresh_tokens
+		SET revoked = TRUE
+		WHERE session_id = $1 AND revoked = FALSE
+	`, sessionID)
 	return err
 }
 

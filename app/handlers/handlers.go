@@ -125,88 +125,37 @@ func syncSnippets(c *gin.Context) {
 		return
 	}
 
-	// Fetch created snippets since the timestamp
-	queryCreated := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+	// Combined query using UNION ALL for single database round-trip
+	// This reduces 3 queries to 1, improving latency and reducing DB load
+	query := `
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, 
+		       NULL::TIMESTAMP WITH TIME ZONE as deleted_at, 'created' as sync_type
 		FROM snippets
 		WHERE user_id = $1 AND is_deleted = false AND created_at > $2
-		ORDER BY created_at ASC
-	`
-
-	createdRows, err := database.DB.QueryContext(c.Request.Context(), queryCreated, userID, updatedSince)
-	if err != nil {
-		respondError(c, http.StatusInternalServerError, "Failed to fetch created snippets")
-		return
-	}
-	defer func() {
-		if closeErr := createdRows.Close(); closeErr != nil {
-			log.Printf("error closing created rows: %v", closeErr)
-		}
-	}()
-
-	created := make([]models.Snippet, 0, 10)
-	for createdRows.Next() {
-		snippet, scanErr := models.ScanSnippet(createdRows)
-		if scanErr != nil {
-			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
-			return
-		}
-		created = append(created, *snippet)
-	}
-	if errRows := createdRows.Err(); errRows != nil {
-		respondError(c, http.StatusInternalServerError, "Error iterating created snippets")
-		return
-	}
-
-	// Fetch updated snippets (exclude those newly created to avoid duplicates)
-	queryUpdated := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		
+		UNION ALL
+		
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at,
+		       NULL::TIMESTAMP WITH TIME ZONE as deleted_at, 'updated' as sync_type
 		FROM snippets
 		WHERE user_id = $1 AND is_deleted = false AND updated_at > $2 AND created_at <= $2
-		ORDER BY updated_at ASC
-	`
-
-	updatedRows, err := database.DB.QueryContext(c.Request.Context(), queryUpdated, userID, updatedSince)
-	if err != nil {
-		respondError(c, http.StatusInternalServerError, "Failed to fetch updated snippets")
-		return
-	}
-	defer func() {
-		if closeErr := updatedRows.Close(); closeErr != nil {
-			log.Printf("error closing updated rows: %v", closeErr)
-		}
-	}()
-
-	updated := make([]models.Snippet, 0, 10)
-	for updatedRows.Next() {
-		snippet, scanErr := models.ScanSnippet(updatedRows)
-		if scanErr != nil {
-			respondError(c, http.StatusInternalServerError, "Failed to scan snippet")
-			return
-		}
-		updated = append(updated, *snippet)
-	}
-	if errRows := updatedRows.Err(); errRows != nil {
-		respondError(c, http.StatusInternalServerError, "Error iterating updated snippets")
-		return
-	}
-
-	// Fetch deletions
-	queryDeleted := `
-		SELECT id, deleted_at
+		
+		UNION ALL
+		
+		SELECT id, '' as label, '' as shortcut, '' as content, ARRAY[]::TEXT[] as tags,
+		       user_id, created_at, updated_at, deleted_at, 'deleted' as sync_type
 		FROM snippets
 		WHERE user_id = $1 AND is_deleted = true AND deleted_at IS NOT NULL AND deleted_at > $2
-		ORDER BY deleted_at ASC
 	`
 
-	deletedRows, err := database.DB.QueryContext(c.Request.Context(), queryDeleted, userID, updatedSince)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, userID, updatedSince)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, "Failed to fetch deleted snippets")
+		respondError(c, http.StatusInternalServerError, "Failed to fetch sync data")
 		return
 	}
 	defer func() {
-		if err := deletedRows.Close(); err != nil {
-			log.Printf("error closing deleted rows: %v", err)
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Printf("error closing sync rows: %v", closeErr)
 		}
 	}()
 
@@ -215,17 +164,60 @@ func syncSnippets(c *gin.Context) {
 		ID        int64      `json:"id"`
 	}
 
+	created := make([]models.Snippet, 0, 10)
+	updated := make([]models.Snippet, 0, 10)
 	deleted := make([]deletedSnippet, 0, 10)
-	for deletedRows.Next() {
-		var item deletedSnippet
-		if scanErr := deletedRows.Scan(&item.ID, &item.DeletedAt); scanErr != nil {
-			respondError(c, http.StatusInternalServerError, "Failed to scan deleted snippet")
+
+	for rows.Next() {
+		var (
+			id        int64
+			label     string
+			shortcut  string
+			content   string
+			tags      pq.StringArray
+			rowUserID sql.NullString
+			createdAt time.Time
+			updatedAt time.Time
+			deletedAt sql.NullTime
+			syncType  string
+		)
+
+		if scanErr := rows.Scan(&id, &label, &shortcut, &content, &tags, &rowUserID,
+			&createdAt, &updatedAt, &deletedAt, &syncType); scanErr != nil {
+			respondError(c, http.StatusInternalServerError, "Failed to scan sync data")
 			return
 		}
-		deleted = append(deleted, item)
+
+		switch syncType {
+		case "created", "updated":
+			snippet := models.Snippet{
+				ID:        id,
+				Label:     label,
+				Shortcut:  shortcut,
+				Content:   content,
+				Tags:      tags,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			}
+			if rowUserID.Valid {
+				snippet.UserID = &rowUserID.String
+			}
+			if syncType == "created" {
+				created = append(created, snippet)
+			} else {
+				updated = append(updated, snippet)
+			}
+		case "deleted":
+			item := deletedSnippet{ID: id}
+			if deletedAt.Valid {
+				item.DeletedAt = &deletedAt.Time
+			}
+			deleted = append(deleted, item)
+		}
 	}
-	if err := deletedRows.Err(); err != nil {
-		respondError(c, http.StatusInternalServerError, "Error iterating deleted snippets")
+
+	if err := rows.Err(); err != nil {
+		respondError(c, http.StatusInternalServerError, "Error iterating sync data")
 		return
 	}
 
@@ -357,10 +349,8 @@ func updateSnippet(c *gin.Context) {
 		return
 	}
 
-	// Check if snippet exists and belongs to user
-	var snippetUserID sql.NullString
-	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
+	// Check if snippet exists and belongs to user (using prepared statement)
+	snippetUserID, err := database.CheckSnippetOwnership(c.Request.Context(), id)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -486,10 +476,8 @@ func deleteSnippet(c *gin.Context) {
 		return
 	}
 
-	// Check if snippet exists and belongs to user
-	var snippetUserID sql.NullString
-	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
+	// Check if snippet exists and belongs to user (using prepared statement)
+	snippetUserID, err := database.CheckSnippetOwnership(c.Request.Context(), id)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -571,10 +559,12 @@ func deleteSnippet(c *gin.Context) {
 
 // getSnippetHistory retrieves version history for a snippet
 // @Summary Get snippet history
-// @Description Get all versions of a snippet (owner only)
+// @Description Get all versions of a snippet with pagination (owner only)
 // @Tags snippets
 // @Produce json
 // @Param id path int true "Snippet ID"
+// @Param limit query int false "Limit results (default 20, max 100)"
+// @Param offset query int false "Offset for pagination"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 403 {object} map[string]string
@@ -589,16 +579,31 @@ func getSnippetHistory(c *gin.Context) {
 		return
 	}
 
+	// Parse pagination params
+	limit := 20
+	offset := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, parseErr := strconv.Atoi(limitStr); parseErr == nil && l > 0 {
+			limit = l
+			if limit > 100 {
+				limit = 100
+			}
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, parseErr := strconv.Atoi(offsetStr); parseErr == nil && o >= 0 {
+			offset = o
+		}
+	}
+
 	// Get authenticated user ID
 	userID, exists := getAuthUserID(c)
 	if !exists {
 		return
 	}
 
-	// Check if snippet exists and belongs to user
-	var snippetUserID sql.NullString
-	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
+	// Check if snippet exists and belongs to user (using prepared statement)
+	snippetUserID, err := database.CheckSnippetOwnership(c.Request.Context(), id)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "Snippet not found")
 		return
@@ -612,16 +617,17 @@ func getSnippetHistory(c *gin.Context) {
 		return
 	}
 
-	// Get history
+	// Get history with pagination
 	query := `
 		SELECT id, snippet_id, version_number, label, shortcut, content, tags,
 		       changed_by, change_type, changed_at, change_notes
 		FROM snippet_history
 		WHERE snippet_id = $1
 		ORDER BY version_number DESC
+		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := database.DB.QueryContext(c.Request.Context(), query, id)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, id, limit, offset)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch history")
 		return
@@ -707,10 +713,8 @@ func restoreSnippetVersion(c *gin.Context) {
 		return
 	}
 
-	// Check if snippet exists and belongs to user
-	var snippetUserID sql.NullString
-	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
+	// Check if snippet exists and belongs to user (using prepared statement)
+	snippetUserID, err := database.CheckSnippetOwnership(c.Request.Context(), id)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "Snippet not found")
 		return

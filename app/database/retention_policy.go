@@ -119,90 +119,47 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		log.Printf("Deleted %d old soft-deleted snippets and %d associated history entries", snippetsDeleted, historyDeleted)
 	}
 
-	// 3. Permanently delete soft-deleted users and all their associated data (older than 60 days)
+	// 3. Permanently delete soft-deleted users and all their associated data (older than configured days)
 	log.Printf("Deleting soft-deleted users older than %v", userCutoff)
 
-	// Get user IDs to delete
-	rows, err := DB.QueryContext(ctx, `
-		SELECT id FROM users WHERE is_deleted = true AND deleted_at < $1
+	// Use batch delete with CASCADE for efficiency instead of per-user loop
+	// Foreign keys with ON DELETE CASCADE handle snippet_history, snippets, sessions, refresh_tokens automatically
+
+	// First, cleanup sessions and tokens for users being deleted (sessions -> refresh_tokens cascade)
+	result, err = DB.ExecContext(ctx, `
+		DELETE FROM sessions
+		WHERE user_id IN (SELECT id FROM users WHERE is_deleted = true AND deleted_at < $1)
 	`, userCutoff)
 	if err != nil {
-		log.Printf("Error fetching soft-deleted users: %v", err)
+		log.Printf("Error batch deleting sessions for expired users: %v", err)
+		// Continue with user deletion anyway
+	} else {
+		sessionsDeleted, _ := result.RowsAffected()
+		log.Printf("Batch deleted %d sessions for expired users", sessionsDeleted)
+	}
+
+	// Delete user roles
+	result, err = DB.ExecContext(ctx, `
+		DELETE FROM user_roles
+		WHERE user_id IN (SELECT id FROM users WHERE is_deleted = true AND deleted_at < $1)
+	`, userCutoff)
+	if err != nil {
+		log.Printf("Error batch deleting user_roles for expired users: %v", err)
+	} else {
+		rolesDeleted, _ := result.RowsAffected()
+		log.Printf("Batch deleted %d user_roles for expired users", rolesDeleted)
+	}
+
+	// Now delete users (CASCADE will handle snippets -> snippet_history)
+	result, err = DB.ExecContext(ctx, `
+		DELETE FROM users WHERE is_deleted = true AND deleted_at < $1
+	`, userCutoff)
+	if err != nil {
+		log.Printf("Error batch deleting expired users: %v", err)
 		return err
 	}
-	defer func() {
-		if cerr := rows.Close(); cerr != nil {
-			log.Printf("Error closing user rows: %v", cerr)
-		}
-	}()
-
-	var userIDs []string
-	for rows.Next() {
-		var userID string
-		if err := rows.Scan(&userID); err != nil {
-			log.Printf("Error scanning user ID: %v", err)
-			continue
-		}
-		userIDs = append(userIDs, userID)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Printf("Error iterating user rows: %v", err)
-		return err
-	}
-
-	if len(userIDs) > 0 {
-		// Delete snippets and history first (cascade)
-		for _, userID := range userIDs {
-			// Delete snippet history first
-			result, err := DB.ExecContext(ctx, `
-				DELETE FROM snippet_history
-				WHERE snippet_id IN (
-					SELECT id FROM snippets WHERE user_id = $1
-				)
-			`, userID)
-			if err != nil {
-				log.Printf("Error deleting snippet history for user %s: %v", userID, err)
-				continue
-			}
-			historyDeleted, errH := result.RowsAffected()
-			if errH != nil {
-				historyDeleted = 0
-			}
-
-			// Delete snippets
-			result, err = DB.ExecContext(ctx, `DELETE FROM snippets WHERE user_id = $1`, userID)
-			if err != nil {
-				log.Printf("Error deleting snippets for user %s: %v", userID, err)
-				continue
-			}
-			snippetsDeleted, errS := result.RowsAffected()
-			if errS != nil {
-				snippetsDeleted = 0
-			}
-
-			// Delete refresh tokens
-			result, err = DB.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
-			if err != nil {
-				log.Printf("Error deleting refresh tokens for user %s: %v", userID, err)
-				continue
-			}
-			tokensDeleted, errT := result.RowsAffected()
-			if errT != nil {
-				tokensDeleted = 0
-			}
-
-			// Delete user
-			_, err = DB.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
-			if err != nil {
-				log.Printf("Error deleting user %s: %v", userID, err)
-				continue
-			}
-
-			log.Printf("Deleted user %s with %d snippets, %d history entries, %d refresh tokens",
-				userID, snippetsDeleted, historyDeleted, tokensDeleted)
-		}
-	}
+	usersDeleted, _ := result.RowsAffected()
+	log.Printf("Batch deleted %d expired soft-deleted users (with cascaded data)", usersDeleted)
 
 	log.Println("Data cleanup completed successfully")
 	return nil

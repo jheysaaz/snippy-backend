@@ -32,6 +32,12 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
+	// Initialize prepared statements for better query performance
+	if err := database.InitPreparedStatements(); err != nil {
+		log.Printf("Warning: prepared statements not initialized: %v", err)
+		// Continue without prepared statements (fallback to regular queries)
+	}
+
 	// Start data retention cleanup job (runs every 24 hours)
 	go startDataRetentionCleanup()
 
@@ -111,9 +117,13 @@ func main() {
 		protectedAuth := api.Group("/auth")
 		protectedAuth.Use(auth.Middleware())
 		{
-			protectedAuth.GET("/sessions", handlers.GetSessions)
-			protectedAuth.POST("/sessions/:sessionId", handlers.LogoutSession)
+			// Sessions endpoints restricted to tester/premium/admin users
+			protectedAuth.GET("/sessions", middleware.SessionsAccess, handlers.GetSessions)
+			protectedAuth.POST("/sessions/:sessionId", middleware.SessionsAccess, handlers.LogoutSession)
 		}
+
+		// Public role routes
+		api.GET("/roles", handlers.GetAllRoles)
 
 		// Protected routes (require authentication)
 		protected := api.Group("")
@@ -125,6 +135,7 @@ func main() {
 				users.GET("/", handlers.GetUsers)
 				users.GET("/profile", handlers.GetCurrentUser)
 				users.PUT("/profile", handlers.UpdateCurrentUser)
+				users.GET("/me/roles", handlers.GetMyRoles)
 				users.GET("/:id", handlers.GetUser)
 				users.PUT("/:id", handlers.UpdateUser)
 				users.DELETE("/:id", handlers.DeleteUser)
@@ -141,6 +152,16 @@ func main() {
 				snippets.DELETE("/:id", handlers.DeleteSnippet)
 				snippets.GET("/:id/history", handlers.GetSnippetHistory)
 				snippets.POST("/:id/restore/:versionNumber", handlers.RestoreSnippetVersion)
+			}
+
+			// Admin-only routes
+			admin := protected.Group("/admin")
+			admin.Use(middleware.AdminOnly)
+			{
+				// Role management
+				admin.GET("/users/:userId/roles", handlers.GetUserRoles)
+				admin.POST("/users/:userId/roles", handlers.AssignUserRole)
+				admin.DELETE("/users/:userId/roles/:roleName", handlers.RevokeUserRole)
 			}
 		}
 	}

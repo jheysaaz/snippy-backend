@@ -81,19 +81,18 @@ func initDatabase() error {
 	-- Create index on email for fast lookups
 	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
-	-- Create refresh_tokens table for persistent authentication
+	-- Create refresh_tokens table for persistent authentication (per-session)
 	CREATE TABLE IF NOT EXISTS refresh_tokens (
 		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
 		token TEXT NOT NULL UNIQUE,
 		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-		revoked BOOLEAN DEFAULT FALSE,
-		device_info TEXT  -- Optional: store device/browser info
+		revoked BOOLEAN DEFAULT FALSE
 	);
 
 	-- Create indexes for refresh_tokens
-	CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+	CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_id ON refresh_tokens(session_id);
 	CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
 	CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
@@ -222,14 +221,13 @@ func initDatabase() error {
 		FOR EACH ROW
 		EXECUTE FUNCTION update_updated_at_column();
 
-	-- Create sessions table for user session tracking
+	-- Create sessions table for user session tracking (no direct token FK)
 	CREATE TABLE IF NOT EXISTS sessions (
 		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		device_info TEXT,
 		ip_address_hash TEXT,
 		user_agent TEXT,
-		refresh_token_id UUID REFERENCES refresh_tokens(id) ON DELETE CASCADE,
 		active BOOLEAN DEFAULT true,
 		last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -257,6 +255,53 @@ func initDatabase() error {
 		BEFORE UPDATE ON sessions
 		FOR EACH ROW
 		EXECUTE FUNCTION update_session_last_activity();
+
+	-- Create roles table for authorization
+	CREATE TABLE IF NOT EXISTS roles (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(50) UNIQUE NOT NULL,
+		description TEXT,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
+
+	-- Insert predefined roles
+	INSERT INTO roles (name, description) VALUES
+		('admin', 'Administrator with full system access'),
+		('user', 'Standard user with basic access'),
+		('tester', 'Beta tester with access to experimental features'),
+		('premium', 'Premium subscriber with access to paid features')
+	ON CONFLICT (name) DO NOTHING;
+
+	-- Create user_roles junction table
+	CREATE TABLE IF NOT EXISTS user_roles (
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+		assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		assigned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+		PRIMARY KEY (user_id, role_id)
+	);
+
+	-- Create indexes for role lookups
+	CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+	CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
+	CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name);
+
+	-- Trigger to assign default role to new users
+	CREATE OR REPLACE FUNCTION assign_default_role()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO user_roles (user_id, role_id)
+		SELECT NEW.id, id FROM roles WHERE name = 'user'
+		ON CONFLICT (user_id, role_id) DO NOTHING;
+		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trigger_assign_default_role ON users;
+	CREATE TRIGGER trigger_assign_default_role
+		AFTER INSERT ON users
+		FOR EACH ROW
+		EXECUTE FUNCTION assign_default_role();
 	`
 
 	_, err := DB.ExecContext(context.Background(), schema)
