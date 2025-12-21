@@ -1,3 +1,4 @@
+// Package middleware provides HTTP middleware for rate limiting and other concerns.
 package middleware
 
 import (

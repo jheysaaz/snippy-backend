@@ -8,27 +8,27 @@ REST API for code snippet management built with Go, Gin, and PostgreSQL.
 
 ## Features
 
-- User authentication with username/email login (Argon2id password hashing)
-- UUID-based user IDs with PostgreSQL generation
-- Full CRUD operations for code snippets
-- Full-text search and filtering by language/tags
-- Optimized PostgreSQL with connection pooling and strategic indexes
-- CORS enabled for browser extension integration
-- Auto-updating timestamps via database triggers
+- **Authentication**: JWT with refresh tokens (HTTP-only cookies), Argon2id hashing
+- **Snippets**: CRUD operations with version history and soft delete
+- **Search**: Full-text search with language/tag filtering
+- **Sessions**: User session tracking with activity monitoring
+- **Sync**: Bandwidth-efficient sync endpoint for incremental updates
+- **Retention**: Automatic cleanup of old data (30/60/90-day policies)
+- **Database**: PostgreSQL with connection pooling, triggers, and CASCADE DELETE
 
 ## Project Structure
 
 ```
 app/
-├── auth/           # Authentication logic and middleware
-├── database/       # Database connection and initialization
-├── handlers/       # HTTP request handlers
-├── models/         # Data models and structures
-└── middleware/     # Application middleware
+├── auth/           # JWT authentication and middleware
+├── database/       # PostgreSQL connection and schema
+├── handlers/       # HTTP handlers and routes
+├── models/         # Data models and database operations
+└── middleware/     # Rate limiting and CORS
 
-tests/              # All test files
-docs/               # Complete documentation
-migrations/         # Database migrations
+migrations/         # Database migrations (auto-applied)
+tests/              # Test files
+docs/               # Documentation
 scripts/            # Deployment scripts
 ```
 
@@ -49,44 +49,41 @@ Server runs on `http://localhost:8080`
 ### Authentication
 
 ```
-POST /api/v1/auth/register   # Register new user
-POST /api/v1/auth/login      # Login with username/email
-POST /api/v1/auth/refresh    # Refresh JWT token
-POST /api/v1/auth/logout     # Logout
+POST   /api/v1/auth/register       # Register new user
+POST   /api/v1/auth/login          # Login (sets refresh token cookie)
+POST   /api/v1/auth/refresh        # Refresh access token
+POST   /api/v1/auth/logout         # Logout (clears cookie)
+GET    /api/v1/auth/availability   # Check username/email availability
+GET    /api/v1/auth/sessions       # List active sessions
+DELETE /api/v1/auth/sessions/:id   # Logout specific session
 ```
 
 ### Snippets
 
 ```
-GET    /api/v1/snippets      # List user snippets (with search/filter)
-POST   /api/v1/snippets      # Create snippet
-GET    /api/v1/snippets/:id  # Get snippet by ID
-PUT    /api/v1/snippets/:id  # Update snippet
-DELETE /api/v1/snippets/:id  # Delete snippet
+GET    /api/v1/snippets                      # List snippets (search, filter, pagination)
+POST   /api/v1/snippets                      # Create snippet
+GET    /api/v1/snippets/sync                 # Sync changes since timestamp
+GET    /api/v1/snippets/:id                  # Get snippet
+PUT    /api/v1/snippets/:id                  # Update snippet
+DELETE /api/v1/snippets/:id                  # Soft delete snippet
+GET    /api/v1/snippets/:id/history          # Get version history
+POST   /api/v1/snippets/:id/history/:version # Restore version
 ```
 
 ### Users
 
 ```
-GET /api/v1/users/profile    # Get current user profile
-PUT /api/v1/users/profile    # Update user profile
+GET    /api/v1/users/profile    # Get profile
+PUT    /api/v1/users/profile    # Update profile
+DELETE /api/v1/users/profile    # Soft delete account
 ```
 
 ### Health
 
 ```
-GET /api/v1/health          # Health check
+GET /api/v1/health    # Health check
 ```
-
-## Documentation
-
-- [API Reference](docs/API.md) - Complete API documentation with examples
-- [Development Setup](docs/DEVELOPMENT.md) - Development environment setup
-- [Database Schema](docs/DATABASE.md) - Database structure and optimizations
-- [Authentication](docs/AUTHENTICATION.md) - JWT authentication system
-- [Architecture](docs/ARCHITECTURE.md) - System design and structure
-- [Security](docs/SECURITY.md) - Security features and best practices
-- [Project Structure](STRUCTURE.md) - Detailed file organization
 
 ## Development
 
@@ -105,23 +102,6 @@ gofmt -s -w .
 
 # Lint code
 golangci-lint run
-```
-
-## Environment Variables
-
-```bash
-# Database
-DATABASE_URL=postgres://user:pass@localhost:5432/dbname?sslmode=disable
-
-# JWT
-JWT_SECRET=your-secret-key
-
-# Server
-PORT=8080
-GIN_MODE=release
-
-# CORS
-CORS_ALLOWED_ORIGINS=http://localhost:3000,https://example.com
 ```
 
 ## Deployment

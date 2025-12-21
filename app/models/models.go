@@ -1,3 +1,4 @@
+// Package models defines data structures and database helpers.
 package models
 
 import (
@@ -55,7 +56,7 @@ type SnippetHistory struct {
 	VersionNumber int       `json:"versionNumber"`
 }
 
-// scanSnippet scans a database row into a Snippet struct
+// ScanSnippet scans a database row into a Snippet struct.
 func ScanSnippet(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*Snippet, error) {
@@ -155,7 +156,7 @@ type UpdateUserRequest struct {
 	AvatarURL *string `json:"avatarUrl,omitempty"`
 }
 
-// scanUser scans a database row into a User struct
+// ScanUser scans a database row into a User struct.
 func ScanUser(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*User, error) {

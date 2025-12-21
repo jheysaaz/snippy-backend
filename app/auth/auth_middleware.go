@@ -1,3 +1,4 @@
+// Package auth provides authentication utilities and middleware.
 package auth
 
 import (
@@ -45,7 +46,7 @@ func Middleware() gin.HandlerFunc {
 		if sessionID != "" {
 			// Update session activity in background to avoid blocking
 			go func() {
-				if err := models.UpdateSessionActivity(sessionID); err != nil {
+				if err := models.UpdateSessionActivity(c.Request.Context(), sessionID); err != nil {
 					log.Printf("Failed to update session activity for %s: %v", sessionID, err)
 				}
 			}()

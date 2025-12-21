@@ -1,6 +1,8 @@
+// Package database contains retention policy utilities.
 package database
 
 import (
+	"context"
 	"log"
 	"time"
 )
@@ -29,6 +31,8 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		policy = DefaultRetentionPolicy()
 	}
 
+	ctx := context.Background()
+
 	// Calculate cutoff dates
 	versionCutoff := time.Now().AddDate(0, 0, -policy.SnippetVersionDays)
 	snippetCutoff := time.Now().AddDate(0, 0, -policy.SoftDeletedSnippetDays)
@@ -36,7 +40,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 
 	// 0. Auto-logout idle sessions
 	log.Printf("Logging out sessions idle for more than %d days", policy.IdleSessionDays)
-	result, err := DB.Exec(`
+	result, err := DB.ExecContext(ctx, `
 		UPDATE sessions 
 		SET active = false, logged_out_at = NOW()
 		WHERE active = true AND last_activity < NOW() - INTERVAL '%d days'
@@ -55,7 +59,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 
 	// 1. Delete old snippet versions (older than 60 days)
 	log.Printf("Deleting snippet versions older than %v", versionCutoff)
-	result, err = DB.Exec(`
+	result, err = DB.ExecContext(ctx, `
 		DELETE FROM snippet_history
 		WHERE changed_at < $1
 	`, versionCutoff)
@@ -74,7 +78,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	log.Printf("Deleting soft-deleted snippets older than %v", snippetCutoff)
 
 	// First delete their history
-	result, err = DB.Exec(`
+	result, err = DB.ExecContext(ctx, `
 		DELETE FROM snippet_history
 		WHERE snippet_id IN (
 			SELECT id FROM snippets WHERE is_deleted = true AND deleted_at < $1
@@ -91,7 +95,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	}
 
 	// Then delete the snippets
-	result, err = DB.Exec(`
+	result, err = DB.ExecContext(ctx, `
 		DELETE FROM snippets
 		WHERE is_deleted = true AND deleted_at < $1
 	`, snippetCutoff)
@@ -110,14 +114,18 @@ func CleanupOldData(policy *RetentionPolicy) error {
 	log.Printf("Deleting soft-deleted users older than %v", userCutoff)
 
 	// Get user IDs to delete
-	rows, err := DB.Query(`
+	rows, err := DB.QueryContext(ctx, `
 		SELECT id FROM users WHERE is_deleted = true AND deleted_at < $1
 	`, userCutoff)
 	if err != nil {
 		log.Printf("Error fetching soft-deleted users: %v", err)
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			log.Printf("Error closing user rows: %v", cerr)
+		}
+	}()
 
 	var userIDs []string
 	for rows.Next() {
@@ -138,7 +146,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 		// Delete snippets and history first (cascade)
 		for _, userID := range userIDs {
 			// Delete snippet history first
-			result, err := DB.Exec(`
+			result, err := DB.ExecContext(ctx, `
 				DELETE FROM snippet_history
 				WHERE snippet_id IN (
 					SELECT id FROM snippets WHERE user_id = $1
@@ -154,7 +162,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 			}
 
 			// Delete snippets
-			result, err = DB.Exec(`DELETE FROM snippets WHERE user_id = $1`, userID)
+			result, err = DB.ExecContext(ctx, `DELETE FROM snippets WHERE user_id = $1`, userID)
 			if err != nil {
 				log.Printf("Error deleting snippets for user %s: %v", userID, err)
 				continue
@@ -165,7 +173,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 			}
 
 			// Delete refresh tokens
-			result, err = DB.Exec(`DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
+			result, err = DB.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
 			if err != nil {
 				log.Printf("Error deleting refresh tokens for user %s: %v", userID, err)
 				continue
@@ -176,7 +184,7 @@ func CleanupOldData(policy *RetentionPolicy) error {
 			}
 
 			// Delete user
-			_, err = DB.Exec(`DELETE FROM users WHERE id = $1`, userID)
+			_, err = DB.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
 			if err != nil {
 				log.Printf("Error deleting user %s: %v", userID, err)
 				continue

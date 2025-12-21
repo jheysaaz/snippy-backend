@@ -1,6 +1,8 @@
+// Package models provides data models and database helpers.
 package models
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -23,7 +25,7 @@ const (
 	RefreshTokenDuration = 3 * 30 * 24 * time.Hour
 )
 
-// generateRefreshToken creates a cryptographically secure random token
+// GenerateRefreshToken creates a cryptographically secure random token.
 func GenerateRefreshToken() (string, error) {
 	// 32 bytes = 256 bits of entropy
 	bytes := make([]byte, 32)
@@ -36,11 +38,11 @@ func GenerateRefreshToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-// storeRefreshToken saves a refresh token to the database
-func StoreRefreshToken(userID, token, deviceInfo string) error {
+// StoreRefreshToken saves a refresh token to the database.
+func StoreRefreshToken(ctx context.Context, userID, token, deviceInfo string) error {
 	expiresAt := time.Now().Add(RefreshTokenDuration)
 
-	_, err := database.DB.Exec(`
+	_, err := database.DB.ExecContext(ctx, `
 		INSERT INTO refresh_tokens (user_id, token, expires_at, device_info)
 		VALUES ($1, $2, $3, $4)
 	`, userID, token, expiresAt, deviceInfo)
@@ -48,11 +50,11 @@ func StoreRefreshToken(userID, token, deviceInfo string) error {
 	return err
 }
 
-// validateRefreshToken checks if a refresh token is valid and not expired/revoked
-func ValidateRefreshToken(token string) (*RefreshToken, error) {
+// ValidateRefreshToken checks if a refresh token is valid and not expired/revoked.
+func ValidateRefreshToken(ctx context.Context, token string) (*RefreshToken, error) {
 	var rt RefreshToken
 
-	err := database.DB.QueryRow(`
+	err := database.DB.QueryRowContext(ctx, `
 		SELECT id, user_id, token, expires_at, created_at, revoked, device_info
 		FROM refresh_tokens
 		WHERE token = $1
@@ -83,9 +85,9 @@ func ValidateRefreshToken(token string) (*RefreshToken, error) {
 	return &rt, nil
 }
 
-// revokeRefreshToken marks a refresh token as revoked
-func RevokeRefreshToken(token string) error {
-	_, err := database.DB.Exec(`
+// RevokeRefreshToken marks a refresh token as revoked.
+func RevokeRefreshToken(ctx context.Context, token string) error {
+	_, err := database.DB.ExecContext(ctx, `
 		UPDATE refresh_tokens
 		SET revoked = TRUE
 		WHERE token = $1
@@ -94,9 +96,9 @@ func RevokeRefreshToken(token string) error {
 	return err
 }
 
-// revokeAllUserTokens revokes all refresh tokens for a user
-func RevokeAllUserTokens(userID string) error {
-	_, err := database.DB.Exec(`
+// RevokeAllUserTokens revokes all refresh tokens for a user.
+func RevokeAllUserTokens(ctx context.Context, userID string) error {
+	_, err := database.DB.ExecContext(ctx, `
 		UPDATE refresh_tokens
 		SET revoked = TRUE
 		WHERE user_id = $1 AND revoked = FALSE
@@ -105,10 +107,10 @@ func RevokeAllUserTokens(userID string) error {
 	return err
 }
 
-// cleanupExpiredTokens removes expired and revoked tokens (run periodically)
-func CleanupExpiredTokens() error {
+// CleanupExpiredTokens removes expired and revoked tokens (run periodically).
+func CleanupExpiredTokens(ctx context.Context) error {
 	// Delete tokens that expired more than 7 days ago
-	_, err := database.DB.Exec(`
+	_, err := database.DB.ExecContext(ctx, `
 		DELETE FROM refresh_tokens
 		WHERE (expires_at < NOW() - INTERVAL '7 days')
 		   OR (revoked = TRUE AND created_at < NOW() - INTERVAL '7 days')

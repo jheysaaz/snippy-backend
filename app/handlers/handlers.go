@@ -1,3 +1,4 @@
+// Package handlers exposes HTTP handlers for the API.
 package handlers
 
 import (
@@ -67,12 +68,16 @@ func getSnippets(c *gin.Context) {
 		}
 	}
 
-	rows, err := database.DB.Query(query, args...)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch snippets")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing snippet rows: %v", err)
+		}
+	}()
 
 	snippets := make([]models.Snippet, 0, 10)
 	for rows.Next() {
@@ -128,12 +133,16 @@ func syncSnippets(c *gin.Context) {
 		ORDER BY created_at ASC
 	`
 
-	createdRows, err := database.DB.Query(queryCreated, userID, updatedSince)
+	createdRows, err := database.DB.QueryContext(c.Request.Context(), queryCreated, userID, updatedSince)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch created snippets")
 		return
 	}
-	defer createdRows.Close()
+	defer func() {
+		if err := createdRows.Close(); err != nil {
+			log.Printf("error closing created rows: %v", err)
+		}
+	}()
 
 	created := make([]models.Snippet, 0, 10)
 	for createdRows.Next() {
@@ -157,12 +166,16 @@ func syncSnippets(c *gin.Context) {
 		ORDER BY updated_at ASC
 	`
 
-	updatedRows, err := database.DB.Query(queryUpdated, userID, updatedSince)
+	updatedRows, err := database.DB.QueryContext(c.Request.Context(), queryUpdated, userID, updatedSince)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch updated snippets")
 		return
 	}
-	defer updatedRows.Close()
+	defer func() {
+		if err := updatedRows.Close(); err != nil {
+			log.Printf("error closing updated rows: %v", err)
+		}
+	}()
 
 	updated := make([]models.Snippet, 0, 10)
 	for updatedRows.Next() {
@@ -186,12 +199,16 @@ func syncSnippets(c *gin.Context) {
 		ORDER BY deleted_at ASC
 	`
 
-	deletedRows, err := database.DB.Query(queryDeleted, userID, updatedSince)
+	deletedRows, err := database.DB.QueryContext(c.Request.Context(), queryDeleted, userID, updatedSince)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch deleted snippets")
 		return
 	}
-	defer deletedRows.Close()
+	defer func() {
+		if err := deletedRows.Close(); err != nil {
+			log.Printf("error closing deleted rows: %v", err)
+		}
+	}()
 
 	type deletedSnippet struct {
 		DeletedAt *time.Time `json:"deletedAt"`
@@ -245,7 +262,7 @@ func getSnippet(c *gin.Context) {
 		WHERE id = $1 AND is_deleted = false
 	`
 
-	row := database.DB.QueryRow(query, id)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, id)
 	snippet, err := models.ScanSnippet(row)
 	if handleScanError(c, err, "Snippet not found") {
 		return
@@ -290,7 +307,8 @@ func createSnippet(c *gin.Context) {
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(
+	row := database.DB.QueryRowContext(
+		c.Request.Context(),
 		query,
 		req.Label,
 		req.Shortcut,
@@ -342,7 +360,7 @@ func updateSnippet(c *gin.Context) {
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -381,7 +399,7 @@ func updateSnippet(c *gin.Context) {
 	var tags pq.StringArray
 	var currentUserID sql.NullString
 	currentQuery := `SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(currentQuery, id).Scan(
+	err = database.DB.QueryRowContext(c.Request.Context(), currentQuery, id).Scan(
 		&currentSnippet.ID,
 		&currentSnippet.Label,
 		&currentSnippet.Shortcut,
@@ -409,7 +427,7 @@ func updateSnippet(c *gin.Context) {
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(query, labelVal, shortcutVal, contentVal, tagsVal, id)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, labelVal, shortcutVal, contentVal, tagsVal, id)
 	snippet, err := models.ScanSnippet(row)
 	if handleScanError(c, err, "Snippet not found") {
 		return
@@ -424,7 +442,7 @@ func updateSnippet(c *gin.Context) {
 			$1, get_next_snippet_version($1), $2, $3, $4, $5, $6, 'edit', $7
 		)
 	`
-	_, err = database.DB.Exec(historyQuery,
+	_, err = database.DB.ExecContext(c.Request.Context(), historyQuery,
 		snippet.ID,
 		snippet.Label,
 		snippet.Shortcut,
@@ -471,7 +489,7 @@ func deleteSnippet(c *gin.Context) {
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Snippet not found"})
 		return
@@ -491,7 +509,7 @@ func deleteSnippet(c *gin.Context) {
 	var tags pq.StringArray
 	var currentUserID sql.NullString
 	snippetQuery := `SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(snippetQuery, id).Scan(
+	err = database.DB.QueryRowContext(c.Request.Context(), snippetQuery, id).Scan(
 		&snippet.ID,
 		&snippet.Label,
 		&snippet.Shortcut,
@@ -509,7 +527,7 @@ func deleteSnippet(c *gin.Context) {
 
 	query := `UPDATE snippets SET is_deleted = true, deleted_at = NOW() WHERE id = $1 AND is_deleted = false`
 
-	result, err := database.DB.Exec(query, id)
+	result, err := database.DB.ExecContext(c.Request.Context(), query, id)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to delete snippet")
 		return
@@ -535,7 +553,7 @@ func deleteSnippet(c *gin.Context) {
 			$1, get_next_snippet_version($1), $2, $3, $4, $5, $6, 'soft_delete', 'Snippet marked as deleted'
 		)
 	`
-	_, err = database.DB.Exec(historyQuery,
+	_, err = database.DB.ExecContext(c.Request.Context(), historyQuery,
 		snippet.ID,
 		snippet.Label,
 		snippet.Shortcut,
@@ -580,7 +598,7 @@ func getSnippetHistory(c *gin.Context) {
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "Snippet not found")
 		return
@@ -603,12 +621,16 @@ func getSnippetHistory(c *gin.Context) {
 		ORDER BY version_number DESC
 	`
 
-	rows, err := database.DB.Query(query, id)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, id)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch history")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing history rows: %v", err)
+		}
+	}()
 
 	history := make([]models.SnippetHistory, 0)
 	for rows.Next() {
@@ -688,7 +710,7 @@ func restoreSnippetVersion(c *gin.Context) {
 	// Check if snippet exists and belongs to user
 	var snippetUserID sql.NullString
 	checkQuery := `SELECT user_id FROM snippets WHERE id = $1`
-	err = database.DB.QueryRow(checkQuery, id).Scan(&snippetUserID)
+	err = database.DB.QueryRowContext(c.Request.Context(), checkQuery, id).Scan(&snippetUserID)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "Snippet not found")
 		return
@@ -710,7 +732,7 @@ func restoreSnippetVersion(c *gin.Context) {
 		FROM snippet_history
 		WHERE snippet_id = $1 AND version_number = $2
 	`
-	err = database.DB.QueryRow(historyQuery, id, versionNumber).Scan(
+	err = database.DB.QueryRowContext(c.Request.Context(), historyQuery, id, versionNumber).Scan(
 		&historicalVersion.Label,
 		&historicalVersion.Shortcut,
 		&historicalVersion.Content,
@@ -734,7 +756,7 @@ func restoreSnippetVersion(c *gin.Context) {
 		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(updateQuery,
+	row := database.DB.QueryRowContext(c.Request.Context(), updateQuery,
 		historicalVersion.Label,
 		historicalVersion.Shortcut,
 		historicalVersion.Content,
@@ -757,7 +779,7 @@ func restoreSnippetVersion(c *gin.Context) {
 		)
 	`
 	changeNotes := "Restored to version " + versionStr
-	_, err = database.DB.Exec(historyInsert,
+	_, err = database.DB.ExecContext(c.Request.Context(), historyInsert,
 		snippet.ID,
 		snippet.Label,
 		snippet.Shortcut,

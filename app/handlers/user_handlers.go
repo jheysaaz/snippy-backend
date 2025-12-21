@@ -1,3 +1,4 @@
+// Package handlers exposes HTTP handlers for the API.
 package handlers
 
 import (
@@ -30,12 +31,16 @@ func getUsers(c *gin.Context) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := database.DB.Query(query)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing user rows: %v", err)
+		}
+	}()
 
 	users := make([]models.User, 0, 10)
 	for rows.Next() {
@@ -74,7 +79,7 @@ func getUser(c *gin.Context) {
 		WHERE id = $1 AND is_deleted = false
 	`
 
-	row := database.DB.QueryRow(query, id)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, id)
 	user, err := models.ScanUser(row)
 	if handleScanError(c, err, "User not found") {
 		return
@@ -114,7 +119,8 @@ func createUser(c *gin.Context) {
 		RETURNING id, username, email, full_name, avatar_url, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(
+	row := database.DB.QueryRowContext(
+		c.Request.Context(),
 		query,
 		req.Username,
 		req.Email,
@@ -194,7 +200,7 @@ func updateUser(c *gin.Context) {
 		RETURNING id, username, email, full_name, avatar_url, created_at, updated_at
 	`
 
-	row := database.DB.QueryRow(query, usernameVal, emailVal, passwordHashVal, fullNameVal, avatarURLVal, id)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, usernameVal, emailVal, passwordHashVal, fullNameVal, avatarURLVal, id)
 	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusNotFound, "User not found")
@@ -237,14 +243,14 @@ func deleteUser(c *gin.Context) {
 	}
 
 	// Revoke all refresh tokens for the user (logout from all devices)
-	if err := models.RevokeAllUserTokens(id); err != nil {
+	if err := models.RevokeAllUserTokens(c.Request.Context(), id); err != nil {
 		log.Printf("Failed to revoke all tokens for user %s: %v", id, err)
 		// Don't return error, continue with user deletion
 	}
 
 	query := `UPDATE users SET is_deleted = true, deleted_at = NOW() WHERE id = $1 AND is_deleted = false`
 
-	result, err := database.DB.Exec(query, id)
+	result, err := database.DB.ExecContext(c.Request.Context(), query, id)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to delete user")
 		return
@@ -308,12 +314,16 @@ func getUserSnippets(c *gin.Context, userID string) {
 		}
 	}
 
-	rows, err := database.DB.Query(query, args...)
+	rows, err := database.DB.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch user snippets")
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("error closing user snippets rows: %v", err)
+		}
+	}()
 
 	snippets := make([]models.Snippet, 0, 10)
 	for rows.Next() {
@@ -374,7 +384,7 @@ func checkAvailability(c *gin.Context) {
 
 	var existingUsername sql.NullString
 	var existingEmail sql.NullString
-	err := database.DB.QueryRow(query, args...).Scan(&existingUsername, &existingEmail)
+	err := database.DB.QueryRowContext(c.Request.Context(), query, args...).Scan(&existingUsername, &existingEmail)
 	if err != nil && err != sql.ErrNoRows {
 		respondError(c, http.StatusInternalServerError, "Failed to check availability")
 		return
@@ -382,13 +392,13 @@ func checkAvailability(c *gin.Context) {
 
 	var usernameAvailable *bool
 	if username != "" {
-		available := !(existingUsername.Valid && existingUsername.String == username)
+		available := !existingUsername.Valid || existingUsername.String != username
 		usernameAvailable = &available
 	}
 
 	var emailAvailable *bool
 	if email != "" {
-		available := !(existingEmail.Valid && existingEmail.String == email)
+		available := !existingEmail.Valid || existingEmail.String != email
 		emailAvailable = &available
 	}
 
@@ -428,7 +438,7 @@ func login(c *gin.Context) {
 		WHERE (username = $1 OR email = $1) AND is_deleted = false
 	`
 
-	row := database.DB.QueryRow(query, req.Login)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, req.Login)
 	user, err := models.ScanUserForAuth(row)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusUnauthorized, "Invalid username/email or password")
@@ -464,7 +474,7 @@ func login(c *gin.Context) {
 	deviceInfo := c.GetHeader("User-Agent")
 
 	// Store refresh token in database
-	if errStore := models.StoreRefreshToken(user.ID, refreshToken, deviceInfo); errStore != nil {
+	if errStore := models.StoreRefreshToken(c.Request.Context(), user.ID, refreshToken, deviceInfo); errStore != nil {
 		log.Printf("failed to store refresh token for %q: %v", user.ID, errStore)
 		respondError(c, http.StatusInternalServerError, "Failed to store refresh token")
 		return
@@ -474,7 +484,7 @@ func login(c *gin.Context) {
 	clientIP := c.ClientIP()
 
 	// Create a session for this login
-	_, err = models.CreateSession(user.ID, deviceInfo, clientIP, c.GetHeader("User-Agent"), "")
+	_, err = models.CreateSession(c.Request.Context(), user.ID, deviceInfo, clientIP, c.GetHeader("User-Agent"), "")
 	if err != nil {
 		log.Printf("failed to create session for user %q: %v", user.ID, err)
 		// Don't fail login if session creation fails, just log it
@@ -526,7 +536,7 @@ func refreshAccessToken(c *gin.Context) {
 	}
 
 	// Validate refresh token
-	rt, err := models.ValidateRefreshToken(refreshToken)
+	rt, err := models.ValidateRefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		switch err {
 		case models.ErrTokenExpired:
@@ -546,7 +556,7 @@ func refreshAccessToken(c *gin.Context) {
 		WHERE id = $1 AND is_deleted = false
 	`
 
-	row := database.DB.QueryRow(query, rt.UserID)
+	row := database.DB.QueryRowContext(c.Request.Context(), query, rt.UserID)
 	user, err := models.ScanUser(row)
 	if err == sql.ErrNoRows {
 		respondError(c, http.StatusUnauthorized, "User not found")
@@ -597,7 +607,7 @@ func logout(c *gin.Context) {
 	}
 
 	// Revoke the refresh token
-	if err := models.RevokeRefreshToken(refreshToken); err != nil {
+	if err := models.RevokeRefreshToken(c.Request.Context(), refreshToken); err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to logout")
 		return
 	}
@@ -632,14 +642,14 @@ func logoutAll(c *gin.Context) {
 	}
 
 	// Revoke all tokens for this user
-	if err := models.RevokeAllUserTokens(userID); err != nil {
+	if err := models.RevokeAllUserTokens(c.Request.Context(), userID); err != nil {
 		log.Printf("Failed to revoke all tokens for user %v: %v", userID, err)
 		respondError(c, http.StatusInternalServerError, "Failed to logout from all devices")
 		return
 	}
 
 	// Logout all sessions for this user
-	if err := models.LogoutAllUserSessions(userID); err != nil {
+	if err := models.LogoutAllUserSessions(c.Request.Context(), userID); err != nil {
 		log.Printf("Failed to logout all sessions for user %v: %v", userID, err)
 	}
 
@@ -660,7 +670,7 @@ func getSessions(c *gin.Context) {
 		return
 	}
 
-	sessions, err := models.GetUserSessions(userID)
+	sessions, err := models.GetUserSessions(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to fetch sessions")
 		return
@@ -688,7 +698,7 @@ func logoutSession(c *gin.Context) {
 	}
 
 	// Get the session to verify ownership
-	session, err := models.GetSessionByID(sessionID)
+	session, err := models.GetSessionByID(c.Request.Context(), sessionID)
 	if err != nil {
 		respondError(c, http.StatusNotFound, "Session not found")
 		return
@@ -701,7 +711,7 @@ func logoutSession(c *gin.Context) {
 	}
 
 	// Logout the session
-	if err := models.LogoutSession(sessionID); err != nil {
+	if err := models.LogoutSession(c.Request.Context(), sessionID); err != nil {
 		respondError(c, http.StatusInternalServerError, "Failed to logout session")
 		return
 	}

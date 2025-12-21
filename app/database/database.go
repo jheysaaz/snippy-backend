@@ -1,12 +1,14 @@
+// Package database initializes and manages the PostgreSQL connection and schema.
 package database
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"os"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
 // DB is the global database connection
@@ -35,7 +37,7 @@ func Init() error {
 
 	// Test database connection and wait for it to be ready
 	for {
-		if err := DB.Ping(); err != nil {
+		if err := DB.PingContext(context.Background()); err != nil {
 			log.Printf("Failed to ping PostgreSQL: %v", err)
 			time.Sleep(1 * time.Second)
 			continue
@@ -257,7 +259,7 @@ func initDatabase() error {
 		EXECUTE FUNCTION update_session_last_activity();
 	`
 
-	_, err := DB.Exec(schema)
+	_, err := DB.ExecContext(context.Background(), schema)
 	if err != nil {
 		return err
 	}

@@ -1,3 +1,4 @@
+// Package main starts the Snippy API HTTP server.
 package main
 
 import (
@@ -40,7 +41,9 @@ func main() {
 	// Ensure cleanup on exit
 	defer func() {
 		if database.DB != nil {
-			database.DB.Close()
+			if err := database.DB.Close(); err != nil {
+				log.Printf("error closing database: %v", err)
+			}
 		}
 	}()
 

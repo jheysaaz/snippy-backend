@@ -1,3 +1,4 @@
+// Package auth provides authentication, JWT handling, and password hashing.
 package auth
 
 import (
@@ -120,11 +121,11 @@ func ValidateOAuthToken(provider, _ string) error {
 	case "google":
 		// Verify with Google's API
 		// https://oauth2.googleapis.com/tokeninfo?id_token=TOKEN
-		return errors.New("Google OAuth validation not implemented - requires API key")
+		return errors.New("google OAuth validation not implemented - requires API key")
 	case "apple":
 		// Verify Apple's JWT token
 		// Use Apple's public keys to verify the signature
-		return errors.New("Apple OAuth validation not implemented - requires Apple credentials")
+		return errors.New("apple OAuth validation not implemented - requires Apple credentials")
 	default:
 		return fmt.Errorf("unsupported OAuth provider: %s", provider)
 	}
