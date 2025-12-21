@@ -14,10 +14,18 @@ import (
 )
 
 // getUsers retrieves all users
+// @Summary List all users
+// @Description Get all users
+// @Tags users
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /users [get]
 func getUsers(c *gin.Context) {
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
 		FROM users
+		WHERE is_deleted = false
 		ORDER BY created_at DESC
 	`
 
@@ -47,6 +55,15 @@ func getUsers(c *gin.Context) {
 }
 
 // getUser retrieves a single user by ID
+// @Summary Get user by ID
+// @Description Get a single user by ID
+// @Tags users
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} models.User
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /users/{id} [get]
 func getUser(c *gin.Context) {
 	id := c.Param("id")
 
@@ -66,6 +83,16 @@ func getUser(c *gin.Context) {
 }
 
 // createUser creates a new user
+// @Summary Register a new user
+// @Description Create a new user account
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param user body models.CreateUserRequest true "User data"
+// @Success 201 {object} models.User
+// @Failure 400 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Router /auth/register [post]
 func createUser(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -83,7 +110,7 @@ func createUser(c *gin.Context) {
 	query := `
 		INSERT INTO users (username, email, password_hash, full_name, avatar_url)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		RETURNING id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
 	`
 
 	row := database.DB.QueryRow(
@@ -110,6 +137,19 @@ func createUser(c *gin.Context) {
 // removed dynamic update builder in favor of static, parameterized UPDATE
 
 // updateUser updates an existing user
+// @Summary Update user
+// @Description Update user profile (own account only)
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param user body models.UpdateUserRequest true "Update data"
+// @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /users/{id} [put]
 func updateUser(c *gin.Context) {
 	id := c.Param("id")
 
@@ -171,6 +211,16 @@ func updateUser(c *gin.Context) {
 }
 
 // deleteUser deletes a user
+// @Summary Delete user
+// @Description Delete user account (own account only)
+// @Tags users
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /users/{id} [delete]
 func deleteUser(c *gin.Context) {
 	id := c.Param("id")
 
@@ -185,7 +235,7 @@ func deleteUser(c *gin.Context) {
 		return
 	}
 
-	query := `DELETE FROM users WHERE id = $1`
+	query := `UPDATE users SET is_deleted = true, deleted_at = NOW() WHERE id = $1 AND is_deleted = false`
 
 	result, err := database.DB.Exec(query, id)
 	if err != nil {
@@ -217,9 +267,9 @@ func getUserSnippets(c *gin.Context, userID string) {
 
 	// Build query with optional filters
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
 		FROM snippets
-		WHERE user_id = $1
+		WHERE user_id = $1 AND is_deleted = false
 	`
 	args := []interface{}{userID}
 	argPos := 2
@@ -277,6 +327,16 @@ func getUserSnippets(c *gin.Context, userID string) {
 }
 
 // login handles user login with username or email and password
+// @Summary Login
+// @Description Authenticate with username/email and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param credentials body models.LoginRequest true "Login credentials"
+// @Success 200 {object} models.LoginResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/login [post]
 func login(c *gin.Context) {
 	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -286,9 +346,9 @@ func login(c *gin.Context) {
 
 	// Query for user by username OR email
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
 		FROM users
-		WHERE username = $1 OR email = $1
+		WHERE (username = $1 OR email = $1) AND is_deleted = false
 	`
 
 	row := database.DB.QueryRow(query, req.Login)
@@ -343,6 +403,16 @@ func login(c *gin.Context) {
 }
 
 // refreshAccessToken generates a new access token using a valid refresh token
+// @Summary Refresh access token
+// @Description Get a new access token using a refresh token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param token body models.RefreshTokenRequest true "Refresh token"
+// @Success 200 {object} models.RefreshTokenResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/refresh [post]
 func refreshAccessToken(c *gin.Context) {
 	var req models.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -366,9 +436,9 @@ func refreshAccessToken(c *gin.Context) {
 
 	// Get user from database
 	query := `
-		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, password_hash, full_name, avatar_url, created_at, updated_at, is_deleted, deleted_at
 		FROM users
-		WHERE id = $1
+		WHERE id = $1 AND is_deleted = false
 	`
 
 	row := database.DB.QueryRow(query, rt.UserID)
@@ -399,6 +469,15 @@ func refreshAccessToken(c *gin.Context) {
 }
 
 // logout revokes the refresh token
+// @Summary Logout
+// @Description Revoke the refresh token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param token body models.RefreshTokenRequest true "Refresh token to revoke"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /auth/logout [post]
 func logout(c *gin.Context) {
 	var req models.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -416,6 +495,13 @@ func logout(c *gin.Context) {
 }
 
 // logoutAll revokes all refresh tokens for the authenticated user
+// @Summary Logout from all devices
+// @Description Revoke all refresh tokens for the authenticated user
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Security BearerAuth
+// @Router /auth/logout-all [post]
 func logoutAll(c *gin.Context) {
 	// Get user ID from JWT token in context (set by AuthMiddleware)
 	userID, exists := getAuthUserID(c)

@@ -35,58 +35,25 @@ This project uses a **manual deployment** approach to ensure stability:
 
 ## Pre-deployment Checklist
 
-Before deploying, ensure:
-
-- ✅ All tests pass locally: `make test-with-db`
-- ✅ Code is formatted: `make format`
-- ✅ Linter passes: `make lint`
-- ✅ Security scan passes: `make security`
-- ✅ Changes are committed and pushed to `main`
+- All tests pass locally: `make test-with-db`
+- Code is formatted: `make format`
+- Linter passes: `make lint`
+- Security scan passes: `make security`
+- Changes are committed and pushed to `main`
 
 ## CI/CD Workflow
 
-```
-┌─────────────────┐
-│  Push to main   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Run CI Tests   │ ◄── Runs on every commit
-│  - Unit tests   │
-│  - Linting      │
-│  - Security     │
-└─────────────────┘
-         │
-         │ (Manual trigger or tag)
-         ▼
-┌─────────────────┐
-│ Deploy Workflow │ ◄── Runs ONLY when:
-│  - Run CI again │     - Manual trigger
-│  - Build binary │     - Version tag
-│  - Deploy       │
-└─────────────────┘
-```
+1. **CI runs on every commit** to `main`/`develop` (tests, linting, security)
+2. **Deploy runs only when**: Manual trigger via UI or version tag pushed
 
 ## Rollback
 
-If deployment fails or issues arise:
+Deploy previous version tag:
 
-1. **Quick rollback**: Deploy previous version tag
-
-   ```bash
-   git tag v1.0.0-rollback v1.0.0^  # Tag previous commit
-   git push origin v1.0.0-rollback
-   ```
-
-2. **SSH to server**:
-   ```bash
-   ssh root@your-server
-   cd /root/snippy-api
-   docker-compose down
-   # Fix issues or restore previous binary
-   docker-compose up -d
-   ```
+```bash
+git tag v1.0.0-rollback v1.0.0^
+git push origin v1.0.0-rollback
+```
 
 ## Monitoring Deployment
 

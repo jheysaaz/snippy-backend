@@ -10,6 +10,7 @@ on:
         default: 'production'
         type: choice
          # TODO: Implenent the option to deploy to diferents droplets depending on staging or production
+         # PS: Project still not generate money to keep two different droplets so it will only deploy to production for a while :)
         options:
           - production
           - staging
@@ -38,13 +39,13 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "✅ Manual deploy triggered"
+            echo "Manual deploy triggered"
           elif [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
             echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "✅ CI passed, proceeding with deploy"
+            echo "CI passed, proceeding with deploy"
           else
             echo "should_deploy=false" >> $GITHUB_OUTPUT
-            echo "❌ CI did not pass, skipping deploy"
+            echo "CI did not pass, skipping deploy"
           fi
   # Deploy to server (single download within this job)
   deploy:
@@ -133,7 +134,7 @@ jobs:
       - name: Deployment Summary
         if: success()
         run: |
-          echo "✅ Deployment completed successfully!"
-          echo "📦 Binary deployed from CI artifact"
-          echo "🌐 Server: ${{ secrets.DROPLET_HOST }}"
-          echo "🕐 Deployed at: $(date)"
+          echo "Deployment completed successfully!"
+          echo "Binary deployed from CI artifact"
+          echo "Server: ${{ secrets.DROPLET_HOST }}"
+          echo "Deployed at: $(date)"

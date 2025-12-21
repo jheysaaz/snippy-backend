@@ -8,10 +8,22 @@ import (
 	"github.com/jheysaaz/snippy-backend/app/database"
 	"github.com/jheysaaz/snippy-backend/app/handlers"
 	"github.com/jheysaaz/snippy-backend/app/middleware"
+	_ "github.com/jheysaaz/snippy-backend/docs"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title Snippy API
+// @version 1.0
+// @description Code snippets management API with authentication
+// @host localhost:8080
+// @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer {token}"
 func main() {
 	// Initialize database
 	if err := database.Init(); err != nil {
@@ -70,6 +82,9 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// Swagger docs
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// API routes
 	api := r.Group("/api/v1")
 	{
@@ -81,6 +96,7 @@ func main() {
 			authRoutes.POST("/login", handlers.Login)
 			authRoutes.POST("/refresh", handlers.RefreshAccessToken)
 			authRoutes.POST("/logout", handlers.Logout)
+			authRoutes.POST("/logout-all", handlers.LogoutAll)
 		}
 
 		// Protected routes (require authentication)

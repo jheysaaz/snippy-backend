@@ -13,6 +13,16 @@ import (
 )
 
 // getSnippets retrieves all snippets with optional filtering
+// @Summary List all snippets
+// @Description Get all snippets with optional tag, search, and limit filters
+// @Tags snippets
+// @Accept json
+// @Produce json
+// @Param tag query string false "Filter by tag"
+// @Param search query string false "Search in label"
+// @Param limit query int false "Limit results (max 100)"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
 func getSnippets(c *gin.Context) {
 	// Optional query parameters for filtering
 	tag := c.Query("tag")
@@ -21,9 +31,9 @@ func getSnippets(c *gin.Context) {
 
 	// Build query with optional filters
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
 		FROM snippets
-		WHERE 1=1
+		WHERE is_deleted = false
 	`
 	args := []interface{}{}
 	argPos := 1
@@ -81,6 +91,17 @@ func getSnippets(c *gin.Context) {
 }
 
 // getSnippet retrieves a single snippet by ID
+// @Summary Get snippet by ID
+// @Description Get a single snippet by its ID
+// @Tags snippets
+// @Accept json
+// @Produce json
+// @Param id path int true "Snippet ID"
+// @Success 200 {object} models.Snippet
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets/{id} [get]
 func getSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -90,9 +111,9 @@ func getSnippet(c *gin.Context) {
 	}
 
 	query := `
-		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at
+		SELECT id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
 		FROM snippets
-		WHERE id = $1
+		WHERE id = $1 AND is_deleted = false
 	`
 
 	row := database.DB.QueryRow(query, id)
@@ -105,6 +126,17 @@ func getSnippet(c *gin.Context) {
 }
 
 // createSnippet creates a new snippet
+// @Summary Create a snippet
+// @Description Create a new snippet for the authenticated user
+// @Tags snippets
+// @Accept json
+// @Produce json
+// @Param snippet body models.CreateSnippetRequest true "Snippet data"
+// @Success 201 {object} models.Snippet
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets [post]
 func createSnippet(c *gin.Context) {
 	var req models.CreateSnippetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -126,7 +158,7 @@ func createSnippet(c *gin.Context) {
 	query := `
 		INSERT INTO snippets (label, shortcut, content, tags, user_id)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
 	`
 
 	row := database.DB.QueryRow(
@@ -151,6 +183,19 @@ func createSnippet(c *gin.Context) {
 // removed dynamic update builder in favor of static, parameterized UPDATE
 
 // updateSnippet updates an existing snippet
+// @Summary Update a snippet
+// @Description Update an existing snippet (owner only)
+// @Tags snippets
+// @Accept json
+// @Produce json
+// @Param id path int true "Snippet ID"
+// @Param snippet body models.UpdateSnippetRequest true "Update data"
+// @Success 200 {object} models.Snippet
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets/{id} [put]
 func updateSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -209,8 +254,8 @@ func updateSnippet(c *gin.Context) {
 			shortcut = COALESCE($2, shortcut),
 			content = COALESCE($3, content),
 			tags = COALESCE($4, tags)
-		WHERE id = $5
-		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at
+		WHERE id = $5 AND is_deleted = false
+		RETURNING id, label, shortcut, content, tags, user_id, created_at, updated_at, is_deleted, deleted_at
 	`
 
 	row := database.DB.QueryRow(query, labelVal, shortcutVal, contentVal, tagsVal, id)
@@ -223,6 +268,18 @@ func updateSnippet(c *gin.Context) {
 }
 
 // deleteSnippet deletes a snippet
+// @Summary Delete a snippet
+// @Description Delete a snippet (owner only)
+// @Tags snippets
+// @Accept json
+// @Produce json
+// @Param id path int true "Snippet ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets/{id} [delete]
 func deleteSnippet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -255,7 +312,7 @@ func deleteSnippet(c *gin.Context) {
 		return
 	}
 
-	query := `DELETE FROM snippets WHERE id = $1`
+	query := `UPDATE snippets SET is_deleted = true, deleted_at = NOW() WHERE id = $1 AND is_deleted = false`
 
 	result, err := database.DB.Exec(query, id)
 	if err != nil {

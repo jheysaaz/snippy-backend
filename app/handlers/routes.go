@@ -35,6 +35,14 @@ var (
 )
 
 // GetCurrentUser returns the currently authenticated user
+// @Summary Get current user profile
+// @Description Get the profile of the authenticated user
+// @Tags users
+// @Produce json
+// @Success 200 {object} models.User
+// @Failure 401 {object} map[string]string
+// @Security BearerAuth
+// @Router /users/profile [get]
 func GetCurrentUser(c *gin.Context) {
 	userID, exists := auth.GetUserIDFromContext(c)
 	if !exists {
@@ -46,6 +54,17 @@ func GetCurrentUser(c *gin.Context) {
 }
 
 // UpdateCurrentUser updates the currently authenticated user
+// @Summary Update current user profile
+// @Description Update the profile of the authenticated user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param user body models.UpdateUserRequest true "Update data"
+// @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Security BearerAuth
+// @Router /users/profile [put]
 func UpdateCurrentUser(c *gin.Context) {
 	userID, exists := auth.GetUserIDFromContext(c)
 	if !exists {
@@ -57,6 +76,17 @@ func UpdateCurrentUser(c *gin.Context) {
 }
 
 // GetCurrentUserSnippets returns snippets for the currently authenticated user
+// @Summary Get current user's snippets
+// @Description Get all snippets belonging to the authenticated user
+// @Tags snippets
+// @Produce json
+// @Param tag query string false "Filter by tag"
+// @Param search query string false "Search in label"
+// @Param limit query int false "Limit results (max 100)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Security BearerAuth
+// @Router /snippets [get]
 func GetCurrentUserSnippets(c *gin.Context) {
 	userID, exists := auth.GetUserIDFromContext(c)
 	if !exists {
