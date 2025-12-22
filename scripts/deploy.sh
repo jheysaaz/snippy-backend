@@ -35,14 +35,72 @@ if [ ! -f /etc/systemd/system/${SERVICE_NAME}.service ]; then
   systemctl enable ${SERVICE_NAME}
 fi
 
-# Initialize SSL certificates (creates self-signed if no domain, or uses existing Let's Encrypt)
+# Initialize SSL certificates
 echo "Initializing SSL certificates..."
 docker volume create snippy-backend_certbot_certs >/dev/null 2>&1 || true
-if [ ! -f /etc/letsencrypt/live/cert/fullchain.pem ]; then
-  docker run --rm \
-    -v snippy-backend_certbot_certs:/etc/letsencrypt \
-    -v "$DEPLOY_DIR/scripts/init-ssl.sh:/init-ssl.sh:ro" \
-    alpine sh -c "apk add --no-cache openssl bash >/dev/null && bash /init-ssl.sh '${DOMAIN:-}' '${CERTBOT_EMAIL:-}' '${CERTBOT_STAGING:-false}'"
+docker volume create snippy-backend_certbot_www >/dev/null 2>&1 || true
+
+# Check if certificates exist in the volume
+CERT_EXISTS=$(docker run --rm -v snippy-backend_certbot_certs:/etc/letsencrypt alpine sh -c "test -f /etc/letsencrypt/live/cert/fullchain.pem && echo 'yes' || echo 'no'")
+
+if [ "$CERT_EXISTS" = "no" ]; then
+  if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "localhost" ]; then
+    # Create self-signed cert for local/no domain
+    echo "Creating self-signed certificate..."
+    docker run --rm \
+      -v snippy-backend_certbot_certs:/etc/letsencrypt \
+      alpine sh -c "
+        apk add --no-cache openssl >/dev/null 2>&1
+        mkdir -p /etc/letsencrypt/live/cert
+        openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+          -keyout /etc/letsencrypt/live/cert/privkey.pem \
+          -out /etc/letsencrypt/live/cert/fullchain.pem \
+          -subj '/CN=localhost/O=Snippy/C=US' 2>/dev/null
+      "
+    echo "Self-signed certificate created"
+  else
+    # For Let's Encrypt, we need nginx running first
+    echo "Starting services for Let's Encrypt challenge..."
+    
+    # Create temporary self-signed cert so nginx can start
+    docker run --rm \
+      -v snippy-backend_certbot_certs:/etc/letsencrypt \
+      alpine sh -c "
+        apk add --no-cache openssl >/dev/null 2>&1
+        mkdir -p /etc/letsencrypt/live/cert
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout /etc/letsencrypt/live/cert/privkey.pem \
+          -out /etc/letsencrypt/live/cert/fullchain.pem \
+          -subj '/CN=${DOMAIN}/O=Snippy/C=US' 2>/dev/null
+      "
+    
+    # Start nginx to handle ACME challenge
+    systemctl restart ${SERVICE_NAME}
+    sleep 10
+    
+    # Request Let's Encrypt certificate
+    echo "Requesting Let's Encrypt certificate for ${DOMAIN}..."
+    STAGING_FLAG=""
+    if [ "${CERTBOT_STAGING:-false}" = "true" ]; then
+      STAGING_FLAG="--staging"
+      echo "Using Let's Encrypt staging server"
+    fi
+    
+    docker compose run --rm certbot certonly --webroot \
+      -w /var/www/certbot \
+      -d ${DOMAIN} \
+      --email ${CERTBOT_EMAIL} \
+      --agree-tos --no-eff-email --non-interactive \
+      --cert-name cert \
+      $STAGING_FLAG
+    
+    echo "Let's Encrypt certificate obtained!"
+    
+    # Reload nginx with new cert
+    docker compose exec nginx nginx -s reload || true
+  fi
+else
+  echo "SSL certificates already exist"
 fi
 
 # Restart service (this runs docker compose)
