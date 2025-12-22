@@ -4,6 +4,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -26,14 +27,14 @@ func Init() error {
 	var err error
 	DB, err = sql.Open("postgres", dbURL)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open database connection: %w", err)
 	}
 
 	// Configure connection pool for performance
 	DB.SetMaxOpenConns(25)
 	DB.SetMaxIdleConns(25)
 	DB.SetConnMaxLifetime(5 * time.Minute)
-	DB.SetConnMaxIdleTime(5 * time.Minute) // Close idle connections after 5 minutes
+	DB.SetConnMaxIdleTime(5 * time.Minute)
 
 	// Test database connection and wait for it to be ready
 	for {

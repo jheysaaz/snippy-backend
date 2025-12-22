@@ -36,7 +36,7 @@ scripts/            # Deployment scripts
 
 ```bash
 # Start PostgreSQL
-docker-compose up -d
+docker compose up -d
 
 # Run server (auto-creates schema)
 go run .

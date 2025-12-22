@@ -79,7 +79,7 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
             cd /root/snippy-api 2>/dev/null || exit 0
-            docker-compose down 2>/dev/null || true
+            docker compose down 2>/dev/null || true
 
       - name: Copy binary to server
         uses: appleboy/scp-action@v1.0.0
@@ -101,13 +101,13 @@ jobs:
           target: "/root/snippy-api/"
           overwrite: true
 
-      - name: Copy docker-compose file
+      - name: Copy docker compose and nginx config
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "docker-compose.yml"
+          source: "docker-compose.yml,nginx.conf"
           target: "/root/snippy-api/"
           overwrite: true
 
@@ -122,15 +122,16 @@ jobs:
           overwrite: true
           strip_components: 0
 
-      - name: Copy deploy script
+      - name: Copy scripts folder
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USERNAME }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "scripts/deploy.sh"
+          source: "scripts/*"
           target: "/root/snippy-api/"
           overwrite: true
+          strip_components: 0
 
       - name: Execute deploy script
         uses: appleboy/ssh-action@v1.2.3

@@ -175,7 +175,6 @@ func main() {
 	log.Printf("Server running on port %s", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Printf("Failed to start server: %v", err)
-		return
 	}
 }
 
