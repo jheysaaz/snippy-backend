@@ -80,7 +80,7 @@ jobs:
           script: |
             cd /root/snippy-api 2>/dev/null || exit 0
             systemctl stop snippy-api 2>/dev/null || true
-            docker compose down 2>/dev/null || true
+            docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
             sleep 2
             # Force remove if still running
             rm -f /root/snippy-api/snippy-api 2>/dev/null || true

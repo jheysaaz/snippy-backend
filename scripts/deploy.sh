@@ -7,7 +7,15 @@ set -e
 DEPLOY_DIR="/root/snippy-api"
 SERVICE_NAME="snippy-api"
 
+# Detect docker compose command (v2 vs v1)
+if docker compose version >/dev/null 2>&1; then
+  DC="docker compose"
+else
+  DC="docker-compose"
+fi
+
 echo "Starting deployment..."
+echo "Using: $DC"
 
 cd "$DEPLOY_DIR"
 
@@ -86,7 +94,7 @@ if [ "$CERT_EXISTS" = "no" ]; then
       echo "Using Let's Encrypt staging server"
     fi
     
-    docker compose run --rm certbot certonly --webroot \
+    $DC --profile ssl run --rm certbot certonly --webroot \
       -w /var/www/certbot \
       -d ${DOMAIN} \
       --email ${CERTBOT_EMAIL} \
@@ -97,7 +105,7 @@ if [ "$CERT_EXISTS" = "no" ]; then
     echo "Let's Encrypt certificate obtained!"
     
     # Reload nginx with new cert
-    docker compose exec nginx nginx -s reload || true
+    $DC exec nginx nginx -s reload || true
   fi
 else
   echo "SSL certificates already exist"
@@ -116,7 +124,7 @@ echo "Running database migrations..."
 for migration in migrations/*.sql; do
   if [[ ! "$migration" =~ rollback\.sql$ ]] && [[ -f "$migration" ]]; then
     echo "Applying migration: $(basename $migration)"
-    docker compose exec -T postgres psql -U "${POSTGRES_USER:-snippy_user}" -d "${POSTGRES_DB:-snippy_production}" -f "/migrations/$(basename $migration)" || {
+    $DC exec -T postgres psql -U "${POSTGRES_USER:-snippy_user}" -d "${POSTGRES_DB:-snippy_production}" -f "/migrations/$(basename $migration)" || {
       echo "Warning: Migration $(basename $migration) may have already been applied or encountered an error"
     }
   fi
@@ -128,7 +136,7 @@ echo "Checking service status..."
 systemctl status ${SERVICE_NAME} --no-pager || true
 
 echo "Checking Docker containers..."
-docker compose ps || true
+$DC ps || true
 
 # Health check
 echo "Running health check..."
@@ -140,6 +148,6 @@ if curl -sf http://localhost/api/v1/health; then
 else
   echo "Health check failed"
   echo "Recent logs:"
-  docker compose logs --tail=50 api || true
+  $DC logs --tail=50 api || true
   exit 1
 fi
