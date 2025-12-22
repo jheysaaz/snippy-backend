@@ -112,7 +112,7 @@ jobs:
           file snippy-api
 
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: snippy-api
           path: snippy-api
